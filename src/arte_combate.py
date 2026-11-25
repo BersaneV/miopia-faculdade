@@ -1,8 +1,9 @@
 """Silhuetas, rastros e avisos. Os sinais são desenhados no ponto usado pela colisão."""
 import math
 import pygame
-from .ilustracao import AMBAR, OSSO, PALIDO, PERIGO, brilho, imagem, losango, sprite
+from .ilustracao import AMBAR, OSSO, PALIDO, PERIGO, alto_contraste, brilho, imagem, losango, sprite, texto
 from .combate import CORTES
+from .fauna_jardim import TEMPO_CACA
 
 CORES = {"fio": (159, 209, 211), "ferrao": (253, 185, 100), "onda": (226, 151, 118), "eco": (153,175,216),"veneno":(163,197,104)}
 MEDIDAS = {"morcego": (65, 44), "aranha": (65, 39), "vespa": (61, 42),
@@ -57,6 +58,76 @@ def golpe_lume(s, lume, cx):
         pygame.draw.lines(s, tinta, False, arco, 2 if ataque.tipo != "corte3" else 3)
 
 
+def corpo_cobra(s, e, x, y, t):
+    aviso = e.estado in ("aviso", "aviso_caca")
+    bote = e.estado in ("investida", "bote_caca")
+    recuo = e.estado in ("recuo", "recuo_caca")
+    if aviso:
+        duracao = TEMPO_CACA if e.estado == "aviso_caca" else getattr(e, "duracao_aviso", e.ficha.aviso/e.ritmo)
+        comprime = 1.-max(0., min(1., e.t/duracao))
+        comprimento, altura, ponta = 41-8*comprime, 16+8*comprime, 14
+    elif bote:
+        comprimento, altura, ponta = 68, 3, 31
+    elif recuo:
+        comprimento, altura, ponta = 50, 8, 21
+    else:
+        comprimento, altura, ponta = 54, 10, 24
+    escala = getattr(e, "escala", 1.)
+    cauda = [
+        (x+escala*e.frente*(ponta-comprimento+n*comprimento/12),
+         y-6-escala*altura*(n/12)**2+math.sin(t*7+n*.8)*(1 if bote else 3))
+        for n in range(13)
+    ]
+    pygame.draw.lines(s, (40, 56, 33), False, cauda, round(12*escala))
+    cor = (151, 130, 75) if escala > 1 else (110, 137, 71)
+    pygame.draw.lines(s, cor, False, cauda, round(7*escala))
+    for px, py in cauda[::2]:
+        pygame.draw.circle(s, (170, 166, 92), (round(px), round(py-1)), 2)
+    hx, hy = map(round, cauda[-1])
+    cabeca = (hx-11*escala, hy-7*escala, 22*escala, 14*escala)
+    pygame.draw.ellipse(s, cor if escala > 1 else (125, 145, 78), cabeca)
+    pygame.draw.ellipse(s, (45, 61, 34), cabeca, 1)
+    pygame.draw.circle(s, AMBAR, (hx+e.frente*5, hy-2), 2)
+    if aviso:
+        face = e.frente
+        pygame.draw.lines(s, OSSO, False, [(hx+face*6,hy+2),(hx+face*13,hy+3),(hx+face*11,hy+9)], 2)
+    elif bote:
+        pygame.draw.line(s, PERIGO, (hx+e.frente*10, hy+2), (hx+e.frente*24, hy+2), 2)
+
+
+def corpo_vespa(s, e, x, y, w, h, pose):
+    estado = e.estado
+    ancorada = getattr(e, "no_poleiro", False)
+    if estado == "aviso":
+        duracao = getattr(e, "duracao_aviso", e.ficha.aviso/e.ritmo)
+        w -= 10
+        h -= 3 + round(6*(1.-max(0., min(1., e.t/duracao))))
+    elif estado == "investida":
+        w += 7
+        h -= 8
+    elif estado == "recuo":
+        w += 11
+        h += 5
+        pose = 0
+    if ancorada:
+        # Abdômen baixo e patas apoiadas distinguem o disparo da vespa de fenda.
+        w -= 6
+        h -= 5
+        pose = int(estado == "aviso")
+    sprite(s, f"inimigo_vespa_{pose}", x, y+2, w, h, e.frente<0)
+    if ancorada:
+        for lado in (-1, 1):
+            pygame.draw.lines(s, PALIDO, False, [(x+lado*8,y-9),(x+lado*15,y-3),(x+lado*20,y-3)], 2)
+    if estado == "aviso":
+        espora = x-e.frente*18
+        if e.tecnica == "ferrao":
+            pygame.draw.lines(s, OSSO, False, [(espora,y-15),(espora-e.frente*9,y-5),(espora,y-8)], 2)
+        else:
+            pygame.draw.lines(s, OSSO, False, [(x-e.frente*19,y-h),(x,y-16),(x+e.frente*6,y-26)], 2)
+    elif estado == "isca":
+        pygame.draw.arc(s, PALIDO, (x-27,y-h-6,54,22), .65, 2.49, 1)
+
+
 def corpo(s,e,cx,t):
     x, y = e.rect.centerx-cx, e.rect.bottom
     if getattr(e,'cego',0)>0:
@@ -66,6 +137,8 @@ def corpo(s,e,cx,t):
     pose = int(e.estado in ("aviso", "investida", "atordoado") or
                (e.tipo in ("morcego", "vespa") and int(t*6)%2==1))
     w,h = MEDIDAS[e.tipo]
+    if getattr(e, "grupo", None) == "ninhada":
+        w, h = round(w*.76), round(h*.78)
     if hasattr(e,'nome'):w,h=88,58
     if e.estado == "aviso":
         w += 4
@@ -74,20 +147,19 @@ def corpo(s,e,cx,t):
         w += 8
         h -= 2
     asset = f"inimigo_{e.tipo}_{pose}"
-    if e.tipo=="cobra":
-        corpo_cobra=[(x-e.frente*30+n*4,y-7-math.sin(t*7+n*.65)*4) for n in range(13)]
-        pygame.draw.lines(s,(40,56,33),False,corpo_cobra,12)
-        pygame.draw.lines(s,(110,137,71),False,corpo_cobra,7)
-        for n,p in enumerate(corpo_cobra[::2]):pygame.draw.circle(s,(170,166,92),(round(p[0]),round(p[1]-2)),2)
-        cabeca=(round(x+e.frente*24),round(y-16))
-        pygame.draw.ellipse(s,(125,145,78),(cabeca[0]-11,cabeca[1]-7,22,14))
-        pygame.draw.ellipse(s,(45,61,34),(cabeca[0]-11,cabeca[1]-7,22,14),1)
-        pygame.draw.line(s,(190,183,119),(cabeca[0]-5,cabeca[1]+4),(cabeca[0]+e.frente*8,cabeca[1]+3),1)
-        pygame.draw.circle(s,AMBAR,(cabeca[0]+e.frente*5,cabeca[1]-2),2)
-        if e.estado in ("aviso","investida"):
-            pygame.draw.line(s,PERIGO,(cabeca[0]+e.frente*10,cabeca[1]+2),(cabeca[0]+e.frente*20,cabeca[1]+3),2)
+    if e.tipo == "cobra":
+        corpo_cobra(s, e, x, y, t)
+    elif e.tipo == "vespa":
+        corpo_vespa(s, e, x, y, w, h, pose)
     else:
         sprite(s, asset, x, y+2, w, h, e.frente<0)
+    if e.estado == "investigar":
+        # Duas marcas claras junto às patas dianteiras acompanham a escuta.
+        cor = (153, 195, 186)
+        for n in (0, 1):
+            px = x + e.frente * (17 + 5*n)
+            py = y - h + 3*n
+            pygame.draw.aaline(s, cor, (px, py), (px + e.frente*5, py-4))
     if e.tipo == "sombra":
         for i in range(4):
             ponta = x-e.frente*(22+i*5)
@@ -103,7 +175,6 @@ def corpo(s,e,cx,t):
         for n in range(5):
             pygame.draw.circle(s,AMBAR,(round(x+math.sin(t*2+n*1.7)*28),round(y-h/2+math.cos(t*2+n)*19)),2)
     if hasattr(e,'nome'):
-        from .ilustracao import texto
         texto(s,e.nome+(' · II' if getattr(e,'fase',1)==2 else ''),x,y-h-43,13,AMBAR,'forte','centerx')
         pygame.draw.line(s,(78,79,52),(x-48,y-h-21),(x+48,y-h-21),4)
         pygame.draw.line(s,AMBAR,(x-48,y-h-21),(x-48+96*max(0,e.vida/e.max_vida),y-h-21),3)
@@ -111,6 +182,8 @@ def corpo(s,e,cx,t):
             for n in range(3):
                 px=x-14+n*11
                 pygame.draw.lines(s,AMBAR,False,[(px-3,y-36),(px+2,y-30),(px-2,y-24)],2)
+        if hasattr(e, "exposta") and not e.exposta:
+            texto(s,"Escamas fechadas",x,y-h-15,11,PALIDO,"forte","centerx")
     if e.guarda:
         losango(s,x,y-h-17,5,PERIGO,False)
         pygame.draw.line(s,AMBAR,(x-8,y-h-17),(x-4,y-h-17),1)
@@ -128,15 +201,19 @@ def inimigo(s,e,cx,lume,t):
 def aviso(s,e,cx,lume,t):
     x,y=e.rect.centerx-cx,e.rect.centery
     tx,ty=e.alvo.x-cx,e.alvo.y
-    pct = min(1., 1-e.t/(e.ficha.aviso/e.ritmo)) if e.estado=="aviso" else 1.
+    duracao = getattr(e, "duracao_aviso", e.ficha.aviso/e.ritmo)
+    pct = max(0., min(1., 1-e.t/duracao)) if e.estado=="aviso" else 1.
     cor = PERIGO if e.estado=="investida" else (196,142,116)
+    realce=int(alto_contraste())
+    if realce:
+        cor=(255,197,157)
     if getattr(e,"acao_atual","")=="fenda_dupla":
         for dx in (-48,48):
-            pygame.draw.line(s,cor,(tx+dx-20,ty-3),(tx+dx+20,ty-3),2)
+            pygame.draw.line(s,cor,(tx+dx-20,ty-3),(tx+dx+20,ty-3),2+realce)
         return
     if e.tecnica=="fenda":
         largura=round(54*pct)
-        pygame.draw.line(s,cor,(tx-largura*.5,ty-3),(tx+largura*.5,ty-3),2)
+        pygame.draw.line(s,cor,(tx-largura*.5,ty-3),(tx+largura*.5,ty-3),2+realce)
         for a in (-1,1):
             pygame.draw.lines(s,cor,False,[(tx+a*28,ty-2),(tx+a*26,ty-10),(tx+a*22,ty-14)],2)
         if e.estado=="investida":
@@ -151,15 +228,24 @@ def aviso(s,e,cx,lume,t):
         return
     limite = min(direcao.length(), 240 if e.tecnica in ("fio","ferrao") else 125)
     direcao= direcao.normalize()
-    for n in range(12, int(limite), 15):
-        p=pygame.Vector2(x,y)+direcao*n
-        pygame.draw.line(s, cor, p, p+direcao*4,1)
+    angulo = getattr(e, "angulo_veneno", 0)
+    linhas = (direcao, direcao.rotate(angulo)) if angulo else (direcao,)
+    for rota in linhas:
+        for n in range(12, int(limite), 15):
+            p=pygame.Vector2(x,y)+rota*n
+            pygame.draw.line(s, CORES["veneno"] if angulo else cor, p, p+rota*(6 if angulo else 4), (2 if angulo else 1)+realce)
     losango(s,x,y-e.rect.h*.65-4,round(3+pct*3),cor,False)
 
 
 def projeteis(s,e,cx,lume,raio,visivel=None):
     if not e.ativo:
         return
+    if getattr(e, "exposta", False) and pygame.Vector2(e.rect.center).distance_to(lume.rect.center) < 260:
+        # Como a mira, a brecha atravessa o borrão sem revelar o cenário.
+        x,y = round(e.rect.centerx-cx),round(e.rect.top-22)
+        cor = (168, 231, 192)
+        losango(s,x,y,5,cor,False)
+        texto(s,"Brecha",x,y-22,12,cor,"forte","centerx")
     if e.estado in ("aviso","investida") and abs(e.rect.centerx-lume.rect.centerx)<350:
         aviso(s,e,cx,lume,e.relogio)
     for p in e.projeteis:

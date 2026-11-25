@@ -6,6 +6,7 @@ from functools import lru_cache
 
 import pygame
 
+from . import arquivo_casca, fio_corte
 from .taticas import Habitante as Inimigo
 from .fases import CHAO, Objeto, Terreno
 
@@ -18,7 +19,18 @@ NIVEIS = (
     ("poco", "Poço da Seiva", 1150, 1630),
     ("cisterna", "Cisterna das Duas Margens", 1630, ALTURA),
 )
-ARQUIVO = pygame.Rect(63, 1065, 343, 217)
+ARQUIVO = arquivo_casca.AREA
+RAIZ_X = 138
+PISO_ARQUIVO = arquivo_casca.PISO
+PISO_POCO = 1492
+RAIZ_DUAS_BOCAS = 'raiz_duas_bocas'
+FERROLHO = pygame.Rect(RAIZ_X-11, PISO_POCO-34, 22, 24)
+CASULO_X = 947
+NICHO_POCO = 1270
+CASULO = pygame.Rect(CASULO_X-20, PISO_POCO-29, 40, 29)
+PAVIO_CASULO = "pavio_casulo_poco"
+COMPORTA = pygame.Rect(1394, 1670, 44, 158)
+TEMPO_COMPORTA = .95
 # Posições em que o pé toca efetivamente uma superfície. Os saves só guardam o ID.
 MARCOS = {
     "bosque": (183, 988),
@@ -62,7 +74,7 @@ def entradas(j):
 
 
 @lru_cache(maxsize=16)
-def terrenos(comporta_aberta=False,jardim_flags=frozenset()):
+def terrenos(comporta_aberta=False,jardim_flags=frozenset(),raiz_aberta=False,passarela_fio=False):
     partes = []
     def t(x,y,w,h,material):
         partes.append(Terreno(pygame.Rect(x,y,w,h), material))
@@ -90,7 +102,12 @@ def terrenos(comporta_aberta=False,jardim_flags=frozenset()):
     # deixam abertos o corredor à direita e uma saída inferior ao poço.
     t(62,1038,300,36,"chao")
     t(51,1040,25,194,"parede")
-    t(70,1173,307,38,"chao")
+    if raiz_aberta:
+        t(70,PISO_ARQUIVO,42,38,"chao")
+        t(112,PISO_ARQUIVO,52,16,"grade")
+        t(164,PISO_ARQUIVO,213,38,"chao")
+    else:
+        t(70,PISO_ARQUIVO,307,38,"chao")
     t(369,1156,205,17,"plataforma")
     t(188,1330,146,17,"plataforma")
     t(247,1411,123,17,"plataforma")
@@ -103,6 +120,7 @@ def terrenos(comporta_aberta=False,jardim_flags=frozenset()):
     t(124,1492,324,77,"chao")
     t(448,1492,246,16,"grade")
     t(694,1492,362,36,"chao")
+    t(922,NICHO_POCO,50,17,"plataforma")
     t(1056,1492,162,16,"grade")
     t(1218,1492,111,36,"chao")
     for x,y,w in ((544,1576,178),(617,1660,181),(556,1744,192),
@@ -110,11 +128,13 @@ def terrenos(comporta_aberta=False,jardim_flags=frozenset()):
         t(x,y,w,18,"plataforma")
     t(36,1828,894,80,"chao")
     t(997,1828,397,80,"chao")  # uma fissura curta antes da desembocadura
+    if passarela_fio:
+        t(*fio_corte.PASSARELA, "ponte")
     # A parede entre as galerias tem duas aberturas em alturas distintas.
     t(1394,0,44,846,"parede")
     t(1394,1010,44,660,"parede")
     if not comporta_aberta:
-        t(1394,1670,44,158,"tranca")
+        t(*COMPORTA,"tranca")
     t(1358,988,265,24,"plataforma")
     # O primeiro beiral pede a segunda batida de asas. A oficina fica sobre a grade.
     t(1600,856,200,20,"plataforma")
@@ -147,7 +167,7 @@ PONTOS = (
     Objeto("marco_estaleiro", "refugio", 1905,790, "Acender o marco do estaleiro"),
     Objeto("volta_estaleiro", "passagem", 2018,790, "Sair na ponte do Córrego"),
     Objeto("placa_viveiro", "registro", 1982,1270, "Ler o nível dos antigos berços"),
-    Objeto("comporta_viveiro", "valvula", 1570,1828, "Levantar a comporta da cisterna"),
+    Objeto("comporta_viveiro", "valvula", 1554,COMPORTA.bottom, "Levantar a comporta da cisterna"),
     Objeto("reliquia_espinho", "reliquia", 283,1173, "Recolher o espinho de acácia"),
     Objeto("reliquia_resina", "reliquia", 2050,1270, "Recolher a resina âmbar"),
 )
@@ -163,7 +183,8 @@ REGISTROS = {
     "ralo_cisterna": ("Duas saídas da água",
         "A luz atravessa a argila e revela dois dentes de madeira. Girá-los deixa a água correr para as duas margens. O contrapeso sobe. Fio deixara aqui um casulo de reserva."),
     "placa_viveiro": ("Um risco em cada berço",
-        "Fio levou os casulos para a oficina quando a água chegou a estes riscos. Deixou resina neste patamar para proteger a luz dos mensageiros. Recolha-a com E. Continue descendo pelos berços até a roda no fundo, à esquerda, para abrir a volta à cisterna."),
+        "O risco baixo tem barro ressecado. O alto foi cortado na noite em que Fio levou os casulos para a oficina. "
+        "Ela deixou resina neste patamar para proteger a luz dos mensageiros. A roda no fundo do Viveiro, à esquerda, abre a volta à cisterna."),
     "comporta_viveiro": ("A água encontra a cisterna",
         "A lâmina de casca sobe e a água corre para oeste. Lume pode voltar pela cisterna sem refazer o caminho pelos berços."),
 }
@@ -173,8 +194,16 @@ def objetos(j):
     from .resgates import objetos as pessoas
     from .jardim import objetos as pontos_jardim
     from .encontros import objetos as lanternas
-    return tuple(o for o in PONTOS
-                 if not (o.tipo=="reliquia" and j.bolsa.estoque.get(o.id.removeprefix("reliquia_"))))+pessoas(j)+pontos_jardim(j)+lanternas(j)
+    raiz_aberta=RAIZ_DUAS_BOCAS in j.cartografia
+    atalhos=(Objeto('raiz_boca_alta','atalho_raiz',RAIZ_X,PISO_ARQUIVO,
+                    'Ler a marca da descida' if raiz_aberta else 'Examinar a raiz rachada'),
+             Objeto('raiz_boca_baixa','atalho_raiz',RAIZ_X,PISO_POCO,
+                    'Subir pelo cipó' if raiz_aberta else 'Examinar o ferrolho'))
+    pontos=tuple(o for o in PONTOS
+                 if not (o.tipo=="reliquia" and j.bolsa.estoque.get(o.id.removeprefix("reliquia_"))))
+    if PAVIO_CASULO not in j.cartografia:
+        pontos += (Objeto(PAVIO_CASULO, "pavio_nicho", CASULO_X+17, NICHO_POCO, "Recolher o pavio de Fio"),)
+    return pontos+atalhos+arquivo_casca.objetos(j)+pessoas(j)+pontos_jardim(j)+lanternas(j)+fio_corte.objetos(j)
 
 
 def camera(j,dt=None):
@@ -194,28 +223,58 @@ def visitar(j):
     j.cartografia.add("viu_"+ident)
 
 
+def abertura_comporta(j):
+    if "viveiro_aberto" not in j.cartografia:
+        return 0.
+    if j.comporta_inicio is None:
+        return 1.
+    u = min(1., max(0., (j.tempo - j.comporta_inicio) / TEMPO_COMPORTA))
+    return u*u*(3.-2.*u)
+
+
+def painel_comporta(j):
+    painel = COMPORTA.copy()
+    painel.height = round(painel.height*(1.-abertura_comporta(j)))
+    return painel
+
+
 def entrar(j,marco,pela_boca=False):
     j.em_vertical=True
+    j.comporta_inicio = None
     j.marco_vertical=marco
     j.vestigios.clear()
     j.boss=None
     j.dialogo=None
-    j.inimigos=[Inimigo(tipo,x,y,dificuldade=j.dificuldade)
-                for tipo,x,y in (("morcego",731,293),("aranha",1146,1492),("sombra",797,1828))
-                if f"vigia_{x}" not in j.cartografia]
-    from .jardim import CRIATURAS
-    for tipo,x,y in CRIATURAS:
-        if f'vigia_{x}' in j.cartografia:continue
-        e=Inimigo(tipo,x,y,dificuldade=j.dificuldade);e.dormir_distante=True
-        j.inimigos.append(e)
+    alterada = j.aplicar_dificuldade_no_marco(repovoar=False)
+    povoar(j)
     j.checkpoint=MARCOS[marco]
     chegada=(1220,316) if pela_boca and marco=="copa" else j.checkpoint
     j.recolocar(chegada)
     visitar(j)
     j.lume.iframes=1.
     camera(j)
-    j.notificar(setor(j.lume.rect.centery,j.lume.rect.centerx)[1]+" · Tab abre o mapa.",4.)
+    if not alterada:
+        j.notificar(setor(j.lume.rect.centery,j.lume.rect.centerx)[1]+" · Tab abre o mapa.",4.)
     j.eventos.append("porta")
+
+
+def povoar(j):
+    j.inimigos=[Inimigo(tipo,x,y,dificuldade=j.dificuldade)
+                for tipo,x,y in (("morcego",731,293),("aranha",1146,1492),("sombra",797,1828))
+                if f"vigia_{x}" not in j.cartografia]
+    from .fauna_jardim import PAR, MoradorDaPonte
+    from .jardim import CRIATURAS
+    par = {}
+    for tipo,x,y in CRIATURAS:
+        if f'vigia_{x}' in j.cartografia:continue
+        if (tipo,x,y) in PAR:
+            e = par[tipo] = MoradorDaPonte(tipo,x,y,j.dificuldade)
+        else:
+            e = Inimigo(tipo,x,y,dificuldade=j.dificuldade)
+        e.dormir_distante = True
+        j.inimigos.append(e)
+    if "cobra" in par:
+        par["cobra"].presa = par.get("vespa")
 
 
 def ralo_iluminado(j,o):
@@ -239,6 +298,34 @@ def interagir(j,o):
         entrar(j, ident.removeprefix("corte_"),pela_boca=True)
         return
     if j.destino_vertical is not None:
+        return
+    if o.tipo in ("fio_corte", "carretel_fio"):
+        fio_corte.interagir(j, o)
+        return
+    if o.tipo in ('veneziana', 'sinal_arquivo'):
+        arquivo_casca.interagir(j, o)
+        return
+    if ident == PAVIO_CASULO:
+        if ident not in j.cartografia:
+            j.cartografia.add(ident)
+            j.bolsa.receber("pavio", 1)
+            j.memorizar("O casulo de mola", "Fio guardava um pavio nesse nicho para ter luz quando voltava do fundo do poço.")
+            j.eventos.append("coleta")
+            j.notificar("Pavio de pólen guardado. Q escolhe e F acende.", 4.)
+        return
+    if o.tipo=='atalho_raiz':
+        if RAIZ_DUAS_BOCAS not in j.cartografia:
+            pista=('Fio deixou a trava por baixo. Desça ao poço pelos galhos a leste.'
+                   if ident=='raiz_boca_alta' else 'O ferrolho é de resina. Um corte com J solta a grade e o cipó.')
+            j.notificar(pista,6.)
+        elif ident=='raiz_boca_alta':
+            j.notificar('S + Espaço na grade desce direto ao poço.',6.)
+        elif not j.lume.em_corda:
+            j.lume.em_corda=True
+            j.lume.corda_destino=PISO_ARQUIVO
+            j.lume.rect.centerx=RAIZ_X
+            j.lume.vx=j.lume.vy=0.
+            j.eventos.append('corda')
         return
     if ident.startswith("volta_"):
         boca=ident.removeprefix("volta_")
@@ -274,11 +361,18 @@ def interagir(j,o):
         j.marco_vertical=ident.removeprefix("marco_")
         j.checkpoint=MARCOS[j.marco_vertical]
         j.notificar("Retorno guardado neste patamar. O marco não repõe luz.")
+        j.aplicar_dificuldade_no_marco()
         j.eventos.append("raiz")
         return
-    if ident=="comporta_viveiro" and "viveiro_aberto" not in j.cartografia:
-        j.cartografia.add("viveiro_aberto")
-        j.eventos.extend(("valvula","agua"))
+    if ident == "comporta_viveiro":
+        if j.comporta_inicio is not None:
+            return
+        if "viveiro_aberto" not in j.cartografia:
+            j.cartografia.update(("viveiro_aberto", "leu_comporta_viveiro"))
+            j.comporta_inicio = j.tempo
+            j.memorizar(*REGISTROS[ident])
+            j.eventos.extend(("valvula", "agua"))
+            return
     if ident=="ralo_cisterna" and "ralo_aberto" not in j.cartografia:
         if not ralo_iluminado(j,o):
             if j.lume.energia<=22:
@@ -290,12 +384,14 @@ def interagir(j,o):
         j.cartografia.add("ralo_aberto")
         j.marco_vertical="cisterna"
         j.checkpoint=MARCOS["cisterna"]
+        j.aplicar_dificuldade_no_marco()
         j.bolsa.receber("casulo",1)
         j.eventos.extend(("agua","porta"))
     if ident=="selo_copa" and "atalho_copa" not in j.cartografia:
         j.cartografia.add("atalho_copa")
         j.marco_vertical="copa"
         j.checkpoint=MARCOS["copa"]
+        j.aplicar_dificuldade_no_marco()
         j.bolsa.receber("pavio",1)
         j.eventos.append("porta")
     if ident=="placa_arquivo" and "leu_placa_arquivo" not in j.cartografia:
@@ -331,6 +427,9 @@ def objetivo(j):
 
 def passo(j,dt,cmd,clarao):
     l=j.lume
+    if j.comporta_inicio is not None and j.tempo - j.comporta_inicio >= TEMPO_COMPORTA:
+        j.comporta_inicio = None
+        j.eventos.append("porta")
     if j.destino_vertical is not None:
         if l.vida<=0:
             j.perder_fagulha()
@@ -366,7 +465,22 @@ def passo(j,dt,cmd,clarao):
     if l.vida<vida_antes:
         j.eventos.append('sacrificio');j.notificar('O golpe usou vida porque faltou brilho.',3.)
     if l.vida<=0:j.perder_fagulha('sacrificio');return
-    j.combater_inimigos(dt,l.arma.area(l),clarao)
+    golpe=l.arma.area(l)
+    if (golpe and l.arma.tipo == "queda" and not l.chao and l.vy >= 0
+            and abs(l.rect.centerx - CASULO_X) <= 33 and golpe.colliderect(CASULO)):
+        l.vy = -748.
+        l.arma.rebote = .46
+        j.eventos.append("rebote_casulo")
+    if golpe and RAIZ_DUAS_BOCAS not in j.cartografia and golpe.colliderect(FERROLHO):
+        j.cartografia.add(RAIZ_DUAS_BOCAS)
+        j.eventos.extend(('madeira','porta'))
+        j.notificar('A grade abriu no arquivo. Use E no cipó para subir.',6.)
+        j.memorizar('O reparo de Fio',
+                    'Fio amarrou um cipó entre o poço e o arquivo para levar os casulos acima da cheia. '
+                    'A marca no alto e o ferrolho embaixo pertencem à mesma raiz.')
+    from .fauna_jardim import aproximar_isca
+    aproximar_isca(j)
+    j.combater_inimigos(dt,golpe,clarao)
     from .jardim import atualizar
     atualizar(j)
     if l.vida<=0:

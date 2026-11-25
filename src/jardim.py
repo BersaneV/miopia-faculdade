@@ -1,16 +1,18 @@
 """Jardim do Último Sinal, circuito contínuo a leste da oficina do Corte."""
 import pygame
 from .fases import Objeto,Terreno
+from .fauna_jardim import PAR, PLACA
 
 LARGURA=4608
 INICIO=2432
+RETORNO=pygame.Rect(2394,1670,38,158)
 FLAGS=frozenset(('jardim_aberto','jardim_comporta','jardim_calha','jardim_plantado'))
 SALAS=(('jardim_ponte','Ponte das Lanternas',pygame.Rect(2432,650,650,220)),
        ('jardim_copa','Jardim Suspenso',pygame.Rect(2640,200,1120,450)),
        ('jardim_estufa','Estufa Seca',pygame.Rect(3760,500,810,380)),
        ('jardim_calhas','Calhas da Memória',pygame.Rect(3600,880,970,700)),
        ('jardim_chuva','Câmara da Chuva',pygame.Rect(2432,1580,2138,328)))
-CRIATURAS=(('cobra',2720,790),('vespa',2870,680),('sombra',3500,316),
+CRIATURAS=(*PAR,('sombra',3500,316),
            ('aranha',3710,790),('carabideo',4350,790),('vespa',4240,680),
            ('cobra',4020,1828),('sombra',3270,1828))
 
@@ -25,7 +27,7 @@ def terrenos(flags):
     # A antiga parede da oficina agora tem duas bocas, ambas com propósito.
     t(2394,0,38,680,'parede');t(2394,850,38,820,'parede')
     if 'jardim_aberto' not in flags:t(2394,680,38,170,'ninho_tranca')
-    if 'jardim_plantado' not in flags:t(2394,1670,38,158,'ninho_tranca')
+    if 'jardim_plantado' not in flags:t(*RETORNO,'ninho_tranca')
     for x,w in ((2427,373),(2950,420),(3490,450),(4260,310)):
         t(x,790,w,24,'ponte')
     t(4100,790,160,14,'grade')
@@ -51,6 +53,8 @@ def objetos(j):
          Objeto('jardim_cipo_oeste','jardim',2520,1828,'Subir ao início do jardim'),
          Objeto('jardim_cipo_leste','jardim',4440,1828,'Subir à estufa')]
     if 'jardim_orvalho' not in j.cartografia:pts.append(Objeto('jardim_orvalho','jardim',3520,316,'Recolher orvalho da copa'))
+    if 'jardim_aberto' in j.cartografia:
+        pts.append(Objeto(PLACA, 'jardim', 2572, 790, 'Ler as marcas do néctar'))
     if 'jardim_brotos' not in j.cartografia:pts.append(Objeto('jardim_brotos','jardim',4500,790,'Recolher as sementes do viveiro'))
     if not j.bolsa.estoque['lente']:pts.append(Objeto('jardim_lente','jardim',3120,316,'Recolher a lente de casca'))
     pts.append(Objeto('jardim_memoria','jardim',2760,1710,'Ler a folha guardada sob a ponte'))
@@ -70,9 +74,17 @@ def interagir(j,o):
         j.memorizar('O jardim aberto','Tila corta a seda, Bento segura o peso e Aru solta as sementes presas. A oficina volta a alcançar a estufa.')
         j.notificar('Estufa aberta. Suba pelos galhos até o orvalho da copa; ele move o contrapeso a leste.',7.)
         j.eventos.extend(('porta','resgate'))
+    elif ident == PLACA:
+        j.dialogo = ("A flor da ponte",
+                    "Aru riscou uma vespa perto da flor e uma cobra de tocaia. "
+                    "Deixe um clarão aqui a oeste com K para chamar a vespa. "
+                    "A cobra espera no chão, abaixo dos galhos.")
+        j.memorizar(*j.dialogo)
+        j.eventos.append("pagina")
     elif ident=='jardim_marco':
         j.marco_vertical='jardim';j.checkpoint=(2510,790)
         j.notificar('Retorno guardado na ponte. O marco não cura.')
+        j.aplicar_dificuldade_no_marco()
     elif ident.startswith('jardim_cipo_'):
         j.lume.em_corda=True;j.lume.corda_destino=790
         j.lume.rect.centerx=o.x;j.lume.vx=j.lume.vy=0.
@@ -100,7 +112,9 @@ def interagir(j,o):
         if 'jardim_plantado' not in c:
             c.add('jardim_plantado');j.bolsa.receber('pavio',2)
             j.eventos.extend(('raiz','resgate'))
-            j.memorizar('A primeira muda','Aru guardou sementes enquanto a colônia discutia a água. Tila marca o canteiro e Bento divide o fluxo: nenhuma muda precisa da água toda.')
+            j.memorizar('O trabalho dos três sinais',
+                        'Tila desatou a seda da ponte. Bento mediu quanto cabia na calha. '
+                        'Aru cuida das sementes que Lume plantou. A primeira muda já bebe água.')
         j.notificar('Nascente plantada. A água abriu o retorno a oeste, junto ao viveiro antigo.',7.)
     elif ident=='jardim_lente':
         j.bolsa.receber('lente',1);j.aplicar_reliquias();j.eventos.append('coleta')
@@ -123,25 +137,35 @@ def atualizar(j):
 
 def objetivo(j):
     c=j.cartografia
-    if 'jardim_plantado' in c:return 'comporta_viveiro','Volte ao viveiro pela passagem a oeste'
+    if 'jardim_plantado' in c:return 'retorno_jardim','Volte ao viveiro pela passagem a oeste'
     if 'jardim_aberto' not in c:return 'jardim_entrada','Peça aos três sobreviventes para abrir a estufa'
     if 'jardim_orvalho' not in c:return 'jardim_orvalho','Suba à copa e recolha orvalho para o contrapeso'
     if 'jardim_comporta' not in c and 'jardim_brotos' not in c:return 'jardim_polia','Encha o contrapeso na ponte da estufa'
     if 'jardim_brotos' not in c:return 'jardim_brotos','Afaste o vigia e recolha as sementes da estufa'
     if 'jardim_calha' not in c:return 'jardim_calha','Desça pela grade e solte o tampão da calha'
-    if 'jardim_plantado' not in c:return 'jardim_plantar','Plante as sementes na nascente do fundo'
-    return 'comporta_viveiro','Volte ao viveiro pela passagem a oeste'
+    return 'jardim_plantar','Plante as sementes na nascente do fundo'
 
 
 def orientar(j):
     from .orientacao import _alvo
-    if 'jardim_plantado' in j.cartografia:return None
     if j.modo!='historia' or not (j.missao=='jardim' or j.concluida and j.missao=='principal' and len(j.sobreviventes)==3):return None
+    ident,acao=objetivo(j)
+    if ident=='retorno_jardim':
+        x,y=j.lume.rect.midbottom
+        if not j.em_vertical or x<RETORNO.left:
+            return None
+        if y<=790:
+            if x>=3960:
+                return _alvo(j,'grade_retorno_jardim','Grade da estufa','Desça pela grade da estufa',4180,790,
+                             'Use S + Espaço na grade. No fundo, siga a água para a esquerda.',opcional=True)
+            return _alvo(j,'vao_retorno_jardim','Vão da ponte','Desça pelo primeiro vão da ponte',2875,790,
+                         'Entre os dois primeiros trechos da ponte há uma descida até o chão. Lá embaixo, siga a água para a esquerda.',opcional=True)
+        return _alvo(j,ident,'Passagem ao viveiro',acao,*RETORNO.midbottom,
+                     'Desça até o chão e siga a água para a esquerda. A passagem aberta leva direto aos berços do viveiro.',opcional=True)
     if not j.em_vertical:
         x=630 if j.etapa==0 else 1944 if j.etapa==1 else 34
         return _alvo(j,'entrada_jardim','Jardim do Último Sinal','Volte ao Corte da Figueira',x,442,
                      'A estufa fica a leste da oficina. Os três sobreviventes ajudam a soltar a entrada.',opcional=True)
-    ident,acao=objetivo(j)
     o=next((o for o in j.objetos if o.id==ident),None)
     if o is None:return None
     return _alvo(j,ident,'Jardim do Último Sinal',acao,o.x,o.y,

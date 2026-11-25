@@ -1,6 +1,6 @@
 """Avisos breves no canto; a missão completa pertence à tela do mapa."""
 import pygame
-from .ilustracao import painel,texto,linhas,AMBAR,PALIDO
+from .ilustracao import dica_teclado, painel, tamanho_texto, texto, linhas, AMBAR, PALIDO
 
 MAX_LINHAS=5
 
@@ -25,14 +25,17 @@ def conteudo(j):
     if j.dialogo:return None
     ensino=getattr(j,'ensino_ate',0)>j.tempo
     if ensino:
-        return j.ensino_titulo,j.ensino_texto
+        from .tutorial import praticado
+        titulo='Praticado' if praticado(j) else j.ensino_titulo
+        return titulo,dica_teclado(j.ensino_texto)
     if j.aviso_t>0 and j.aviso and j.aviso!=j.fase.name:
-        return 'Na trilha',j.aviso
+        return 'Na trilha',dica_teclado(j.aviso)
     return None
 
 
 def altura(msg,interacao):
-    return 38+len(linhas_corpo(msg))*17+(24 if interacao else 0)
+    rodape = 12 + tamanho_texto(12) if interacao else 0
+    return 38+len(linhas_corpo(msg))*(tamanho_texto(13)+4)+rodape
 
 
 def ocupa_esquerda(j):
@@ -49,7 +52,7 @@ def desenhar(s,j):
     corpo=linhas_corpo(msg)
     r=caixa(j,altura(msg,interacao));painel(s,r,False)
     texto(s,titulo,r.x+12,r.y+8,14,AMBAR,'forte')
-    for n,l in enumerate(corpo):texto(s,l,r.x+12,r.y+32+n*17,13,PALIDO)
+    for n,l in enumerate(corpo):texto(s,l,r.x+12,r.y+32+n*(tamanho_texto(13)+4),13,PALIDO)
     if interacao:
         from .cartografia import texto_curto
-        texto(s,texto_curto('E · '+interacao,240,12,'forte'),r.x+12,r.bottom-21,12,AMBAR,'forte')
+        texto(s,texto_curto(dica_teclado('E · ')+interacao,240,12,'forte'),r.x+12,r.bottom-9-tamanho_texto(12),12,AMBAR,'forte')

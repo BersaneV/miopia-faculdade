@@ -3,11 +3,12 @@ import math
 import pygame
 from .ensaios import ENSAIOS, INDICE_ARANHA
 from . import ambiental
+from .controles import ACOES, ROTULOS_PAD, nome_tecla
 from .narrativa import RAIZES
-from .ilustracao import (AMBAR, OSSO, PALIDO, TEAL, ROMANOS, brilho, imagem, linhas,
-                         losango, painel, paragrafo, placa, texto)
+from .ilustracao import (AMBAR, OSSO, PALIDO, TEAL, ROMANOS, brilho, dica_teclado, imagem, linhas,
+                         losango, painel, paragrafo, placa, tamanho_texto, texto)
 from .paisagem import NPC_TAM, slug
-from .roteiro import CONTROLES, ENTRADAS, FINAL, PROLOGO, epilogo
+from .roteiro import CONTROLES, FINAL, PROLOGO, epilogo, linha_da_viagem, texto_travessia
 
 SEMENTE_ANTERIOR=pygame.Rect(466,321,38,32)
 SEMENTE_SEGUINTE=pygame.Rect(643,321,38,32)
@@ -23,6 +24,7 @@ def fundo(s,a):
 
 
 def opcoes(a,s,nomes,x,y,w,passo=34,tam=18,limite=None):
+    from .cartografia import texto_curto
     a.alvos=[]
     primeiro=max(0,min(a.selecao-(limite or len(nomes))//2,len(nomes)-(limite or len(nomes))))
     for i,nome in enumerate(nomes):
@@ -35,7 +37,9 @@ def opcoes(a,s,nomes,x,y,w,passo=34,tam=18,limite=None):
             s.blit(placa(r.w,r.h,199),r)
             pygame.draw.line(s,(129,124,94),r.bottomleft,r.bottomright)
             losango(s,r.x+12,r.centery,4)
-        texto(s,nome,r.x+26,r.y+(r.h-tam)//2-3,tam,AMBAR if ativo else OSSO,"forte" if ativo else "normal")
+        estilo="forte" if ativo else "normal"
+        texto(s,texto_curto(nome,w-34,tam,estilo),r.x+26,r.y+(r.h-tamanho_texto(tam))//2-3,
+              tam,AMBAR if ativo else OSSO,estilo)
         a.alvos.append(r)
 
 
@@ -46,7 +50,8 @@ def menu(a,s):
     pygame.draw.line(s,TEAL,(62,183),(282,183))
     losango(s,289,183,3)
     opcoes(a,s,a.menu_nomes(),55,203,270,32,18)
-    texto(s,"Setas  escolher     Enter  confirmar",60,501,14,PALIDO)
+    guia="Direcional  escolher     A  confirmar" if a.controles.ultimo_pad else "Setas  escolher     Enter  confirmar"
+    texto(s,guia,60,501,14,PALIDO)
     if a.mem.aviso: texto(s,a.mem.aviso,340,504,13,AMBAR)
 
 
@@ -67,7 +72,7 @@ def ensaios(a,s):
     if a.selecao<len(ENSAIOS):
         c=ENSAIOS[a.selecao]
         texto(s,c.nome,467,196,24,AMBAR,"titulo")
-        paragrafo(s,c.pista,467,242,386,18)
+        paragrafo(s,dica_teclado(c.pista),467,242,386,18)
         if a.selecao==INDICE_ARANHA:
             for botao,sinal in ((SEMENTE_ANTERIOR,"‹"),(SEMENTE_SEGUINTE,"›")):
                 painel(s,botao,False)
@@ -80,22 +85,26 @@ def ensaios(a,s):
     texto(s,"Enter   abrir trecho      Esc   voltar",82,459,15,PALIDO)
 
 
-def ajuda(a,s):
+def ajuda(a,s,rodape='Esc ou Enter   ·   voltar'):
     livro(a,s,"Controles","CADERNO DE CAMPO")
     for i,(key,acao) in enumerate(CONTROLES):
-        texto(s,key,86,130+i*25,16,AMBAR,"forte")
-        texto(s,acao,302,130+i*25,14,OSSO)
-    texto(s,"Esc ou Enter   ·   voltar",84,461,15,PALIDO)
+        if i < 11:
+            key=dica_teclado(key)
+        if i in (5, 6):
+            acao=dica_teclado(acao)
+        texto(s,key,86,130+i*22,16,AMBAR,"forte")
+        texto(s,acao,302,130+i*22,14,OSSO)
+    texto(s,rodape,84,461,15,PALIDO)
 
 
 def opcoes_ajustes(a,s):
     livro(a,s,"Ajustes","MIOPIA")
     p=a.mem.prefs
-    labels=[f"Dificuldade  ·  {p['dificuldade'].capitalize()}",
+    labels=[f"Dificuldade  ·  {a.dificuldade_escolhida.capitalize()}",
             f"Ambiência  ·  {round(p['musica']*100)}%",f"Efeitos  ·  {round(p['efeitos']*100)}%",
             "Brilho da mata  ·  "+("Mínimo","Noturno","Médio","Alto")[p["brilho"]],
-            "Som  ·  "+("silenciado" if p["mudo"] else "ligado"),"Voltar"]
-    opcoes(a,s,labels,77,134,390,41,19)
+            "Som  ·  "+("silenciado" if p["mudo"] else "ligado"),"Controles","Acessibilidade","Voltar"]
+    opcoes(a,s,labels,77,127,390,32,18)
     from .paisagem import mascara_luz
     # Demonstra foco e fundo escuro, sem a antiga amostra de breu absoluto.
     amostra = imagem("fundo_0.jpg",340,188).copy()
@@ -112,7 +121,36 @@ def opcoes_ajustes(a,s):
     s.blit(amostra,(517,146))
     texto(s,"Visibilidade na mata",517,344,15,PALIDO)
     texto(s,"Esquerda / direita  ajustar     Enter ou clique  avançar",82,410,16,PALIDO)
-    texto(s,"A dificuldade se aplica à próxima jornada.",82,448,16,PALIDO)
+    if a.ajustes_da_historia:
+        j = a.jogo
+        situacao = f"Ativa · {j.dificuldade.capitalize()}"
+        if j.dificuldade_pendente:
+            situacao += f"    |    {j.dificuldade_pendente.capitalize()} no próximo marco"
+        else:
+            situacao += "    |    Mudanças valem no próximo marco"
+    else:
+        situacao = "Preferência para novas histórias e ensaios."
+    texto(s,situacao,82,448,16,PALIDO)
+
+
+def remapeamento(a,s):
+    livro(a,s,"Controles","AJUSTES")
+    nomes = [f"{nome}   ·   {nome_tecla(a.controles.codigos(acao)[0])}   |   {ROTULOS_PAD[acao]}"
+             for acao,(nome, _, _) in ACOES.items()]
+    opcoes(a,s,[*nomes,"Restaurar teclas padrão","Voltar"],77,162,525,30,17,limite=9)
+    texto(s,"Ação  ·  Teclado  |  Controle",84,128,15,PALIDO)
+    paragrafo(s,"No controle, A confirma e B volta nos menus. O analógico esquerdo ou o direcional movem Lume.",628,166,235,16)
+    texto(s,a.aviso_tecla or "Enter troca uma tecla. Esc volta.",84,459,16,AMBAR)
+
+
+def acessibilidade(a,s):
+    livro(a,s,"Acessibilidade","AJUSTES")
+    p = a.mem.prefs
+    opcoes(a,s,[f"Tamanho do texto  ·  {p['texto']}%",
+                 "Alto contraste  ·  "+("Ligado" if p["contraste"] else "Desligado"),
+                 "Clarões suaves  ·  "+("Ligados" if p["claroes_suaves"] else "Desligados"),
+                 "Voltar"],77,134,415,41,19)
+    texto(s,"Esquerda / direita ajusta · Esc volta",84,444,15,PALIDO)
 
 
 def creditos(a,s):
@@ -136,8 +174,10 @@ def pausa(a,s):
     opcoes(a,s,nomes,315,176,330,39)
     dica=(f"Semente {a.jogo.semente}   ·   R para repetir" if a.ensaio==INDICE_ARANHA
           else "R para repetir o ensaio" if a.ensaio is not None
-          else "O tempo da mata está suspenso.")
+          else f"Dificuldade ativa · {a.jogo.dificuldade.capitalize()}")
     texto(s,dica,480,414,15,PALIDO,"normal","centerx")
+    if a.ensaio is None and a.jogo.dificuldade_pendente:
+        texto(s,f"{a.jogo.dificuldade_pendente.capitalize()} no próximo marco",480,434,13,AMBAR,"forte","centerx")
 
 
 def morte(a,s):
@@ -177,35 +217,36 @@ def replay(a,s):
 def confirmar(a,s):
     livro(a,s,a.conf_titulo,"MIOPIA")
     paragrafo(s,a.conf_msg,84,163,741,20)
-    opcoes(a,s,["Voltar",a.conf_acao],77,278,410,46)
+    opcoes(a,s,["Cancelar",a.conf_acao],77,278,410,46)
 
 
 def dialogo(a,s):
     j=a.jogo
     nome,msg=j.dialogo
+    controle=a.controles.ultimo_pad
+    avancar="RT / A" if controle else dica_teclado("E")+" / Enter"
     if j.escolha_resgate is not None:
         painel(s,(73,228,814,260))
         texto(s,nome,97,240,25,AMBAR,'titulo')
         paragrafo(s,a.fala_visivel,97,277,760,17,OSSO)
         ultima=a.pagina_fala==len(a.fala_paginas)-1 and a.letras==len(a.fala)
         if ultima:
-            nomes=['Marcar a trilha com luz','Preparar um mantimento único']
-            if j.escolha_resgate=='tila':
-                pavio=('pavio já recebido' if j.sobreviventes['tila']['premio']
-                       else '1 Pavio de pólen, com 12 s de visão ampliada')
-                nomes=['Marcar a grade e a forquilha com luz',f'Ajudar Mimo no abrigo · {pavio}']
+            from .resgates import rotulos_trabalho
+            nomes = rotulos_trabalho(j, j.escolha_resgate)
             opcoes(a,s,nomes,90,386,770,35,16)
-            texto(s,'Cima / baixo escolher · Enter confirmar · Esc decidir depois',97,467,12,PALIDO)
-        else:texto(s,f'Enter avançar · {a.pagina_fala+1}/{len(a.fala_paginas)}',863,465,12,PALIDO,'normal','right')
+            confirmar="A confirmar · B decidir depois" if controle else "Enter confirmar · Esc decidir depois"
+            texto(s,'Cima / baixo escolher · '+confirmar,97,467,12,PALIDO)
+        else:texto(s,f'{avancar} avançar · {a.pagina_fala+1}/{len(a.fala_paginas)}',863,465,12,PALIDO,'normal','right')
         return
-    painel(s,(73,344,814,139))
+    recuo=5*(tamanho_texto(17)-17)
+    painel(s,(73,344-recuo,814,139+recuo))
     x=97
     if nome in NPC_TAM:
         img=imagem("npc_"+slug(nome)+".png",76,70)
-        s.blit(img,(88,379)); x=179
-    texto(s,nome,x,355,20,AMBAR,"titulo")
-    paragrafo(s,a.fala_visivel,x,384,825-x,17,OSSO)
-    texto(s,f'E / Enter avançar · {a.pagina_fala+1}/{len(a.fala_paginas)}',866,456,12,PALIDO,"normal","right")
+        s.blit(img,(88,379-recuo)); x=179
+    texto(s,nome,x,355-recuo,20,AMBAR,"titulo")
+    paragrafo(s,a.fala_visivel,x,384-recuo,825-x,17,OSSO)
+    texto(s,f'{avancar} avançar · {a.pagina_fala+1}/{len(a.fala_paginas)}',866,456,12,PALIDO,"normal","right")
 
 
 def cena(a,s):
@@ -218,6 +259,10 @@ def cena(a,s):
     texto(s,titulo,62,347,39,OSSO,"titulo")
     paragrafo(s,a.fala_visivel,65,411,810,19)
     texto(s,"Enter  avançar     Esc  pular prólogo",894,504,14,PALIDO,"normal","right")
+
+
+def paginas_diario(a):
+    return 2+bool(a.jogo.cartografia)+len(a.jogo.diario)+2*(a.ensaio is None)
 
 
 def diario(a,s):
@@ -236,9 +281,16 @@ def diario(a,s):
         texto(s,"Abrigo",115,379,16,PALIDO)
         texto(s,"Tab / Esc   fechar",84,465,15,PALIDO)
         return
+    total=paginas_diario(a)
+    if a.ensaio is None and a.pagina==total-1:
+        ajuda(a,s,'Esquerda / direita   mudar página     M / Tab / Esc   fechar')
+        texto(s,f'{total} / {total}',873,77,20,PALIDO,'titulo','right')
+        return
+    if a.ensaio is None and a.pagina==total-2:
+        pagina_viagem(a,s,total)
+        return
     livro(a,s,"Diário de Lume","CADERNO DE CAMPO")
     tem_corte=bool(j.cartografia)
-    total=len(j.diario)+2+tem_corte
     texto(s,f"{a.pagina+1} / {total}",873,77,20,PALIDO,"titulo","right")
     if a.pagina==0:
         pagina_mapa(a,s)
@@ -256,35 +308,62 @@ def diario(a,s):
     texto(s,"Esquerda / direita   mudar página     Tab / Esc   fechar",84,465,15,PALIDO)
 
 
+def pagina_viagem(a,s,total):
+    livro(a,s,"A viagem de Lume","CADERNO DE CAMPO")
+    texto(s,f"{a.pagina+1} / {total}",873,77,20,PALIDO,"titulo","right")
+    for n,(nome,estado,trecho) in enumerate(linha_da_viagem(a.jogo)):
+        y=134+n*81
+        losango(s,90,y+13,5,AMBAR,estado=="Raiz restaurada")
+        texto(s,nome,108,y,22,OSSO,"titulo")
+        texto(s,estado,869,y+5,13,AMBAR,"forte","right")
+        paragrafo(s,trecho,108,y+30,742,15,PALIDO)
+        if n<3:
+            pygame.draw.line(s,(56,77,70),(86,y+70),(873,y+70))
+    texto(s,"Esq. / Dir. mudam a página. M, Tab ou Esc fecham.",84,472,14,PALIDO)
+
+
 def pagina_mapa(a,s,corte=False):
-    from .cartografia import alvo_local,mapa_local,texto_curto
-    from .mapa_visor import contexto,QUADRO
-    from .missoes import rastreada
+    from .aula_sino import ativa as gruta
+    from .cartografia import alvo_local,texto_curto
+    from .mapa_visor import contexto
     j=contexto(a.jogo,corte);v=a.mapa_visor;v.preparar(j)
     ensaio=ENSAIOS[a.ensaio] if getattr(a,'ensaio',None) is not None else None
     titulo='Campo de testes · '+ensaio.nome if ensaio else a.jogo.objetivo
     for n,l in enumerate(linhas(titulo,780,17,'forte')[:2]):
-        texto(s,l,480,132+n*21,17,OSSO,'forte','centerx')
+        texto(s,l,480,132+n*(tamanho_texto(17)+4),17,OSSO,'forte','centerx')
     alvo=alvo_local(j)
     detalhe=ensaio.pista if ensaio else alvo.detalhe if alvo else 'Explore as trilhas e marque os lugares a que deseja voltar.'
     if getattr(a.jogo,'ensino_ate',0)>a.jogo.tempo:detalhe=getattr(a.jogo,'ensino_detalhe',detalhe)
-    if getattr(j,'_mapa_sem_lume',False):detalhe='Consulta do Corte · C centraliza no último marco; Lume está na superfície.'
+    detalhe=dica_teclado(detalhe)
+    if getattr(j,'_mapa_sem_lume',False):detalhe='Consulta do Corte · Lume está na superfície. Centralize para ver o último marco.'
     if a.mapa_aviso_ate>a.relogio:detalhe=a.mapa_aviso
-    for n,l in enumerate(linhas(detalhe,780,12)[:2]):texto(s,l,480,180+n*16,12,PALIDO,'normal','centerx')
+    for n,l in enumerate(linhas(detalhe,780,12)[:2]):texto(s,l,480,180+n*(tamanho_texto(12)+4),12,PALIDO,'normal','centerx')
     regiao='Corte da Figueira' if j.em_vertical else j.fase.name
-    texto(s,regiao+' · Âmbar: Lume   Verde: objetivo   Sinais: descida',85,215,11,AMBAR)
+    legenda = (" · Traços âmbar: piso pisado   Contorno verde: terreno visto   Setas: conexões"
+               if gruta(j) else ' · Âmbar: Lume   Verde: objetivo   Sinais: descida')
+    texto(s,texto_curto(regiao+legenda,728,11),85,215,11,AMBAR)
     texto(s,f'{v.zoom:.1f}×',864,212,14,AMBAR,'forte','right')
     v.desenhar(s,j)
     bolsa=a.jogo.bolsa
     bonus=[f'Bálsamos {bolsa.estoque["balsamo"]}/{bolsa.capacidade_balsamo} · reserva {bolsa.reserva_balsamo}']
+    if a.jogo.agulha_disponivel:
+        arma='Agulha de taquara' if a.jogo.lume.arma.equipamento=='agulha' else 'Espinho'
+        bonus.append(f'{arma} (V na partida)')
     if bolsa.bonus_dano>1:bonus.append('dano +25%')
     if bolsa.bonus_velocidade>1:bonus.append('movimento +12%')
     if bolsa.estoque['resina']:bonus.append('K 18 · golpes luz −20%')
     if bolsa.estoque['lente']:bonus.append('visão +18 px')
-    texto(s,texto_curto(' · '.join(bonus),780,11),85,442,11,TEAL)
+    texto(s,texto_curto(dica_teclado(' · '.join(bonus)),780,11),85,442,11,TEAL)
+    if a.controles.ultimo_pad:
+        texto(s,'LB / RB zoom · Analógico move · R3 centraliza',85,463,12,PALIDO)
+        texto(s,'Direcional troca a página · View fecha · Mouse marca',85,482,12,PALIDO)
+        return
     texto(s,'+ / − ou roda: zoom · WASD ou arrastar: mover · C: centralizar',85,463,12,PALIDO)
     from .marcas_mapa import TIPOS,CORES
-    texto(s,f'Direito: marcar/remover · V: {TIPOS[a.mapa_tipo]} · Esq / Dir: páginas · M fecha',85,482,12,CORES[a.mapa_tipo])
+    guia=' · Esq. 2 vezes: viagem' if not corte and a.ensaio is None else ''
+    fechar=dica_teclado("M")
+    linha=f'Direito: marcar/remover · V: {TIPOS[a.mapa_tipo]} · Esq / Dir: páginas · {fechar} fecha{guia}'
+    texto(s,texto_curto(linha,780,12),85,482,12,CORES[a.mapa_tipo])
 
 
 def painel_pedidos(a,s):
@@ -304,12 +383,13 @@ def painel_pedidos(a,s):
         losango(s,95,y+10,3,AMBAR,m.id==ativo)
         texto(s,texto_curto(m.titulo,302,15,"forte"),107,y-2,15,OSSO,"forte")
         texto(s,m.estado,107,y+15,11,PALIDO)
-    texto(s,f"{cursor+1}/{len(lista)} · Cima / baixo escolher · R acompanhar",85,428,11,AMBAR)
+    tecla="A" if a.controles.ultimo_pad else "R"
+    texto(s,f"{cursor+1}/{len(lista)} · Cima / baixo escolher · {tecla} acompanhar",85,428,11,AMBAR)
     m=lista[cursor];x=449
     for n,l in enumerate(linhas(m.titulo,412,21,"titulo")[:2]):
         texto(s,l,x,145+n*25,21,AMBAR,"titulo")
     texto(s,"De "+m.origem+" para "+m.destino,x,207,13,OSSO,"forte")
-    texto(s,FASES[m.etapa].name+" · "+m.estado,x,229,13,PALIDO)
+    texto(s,(m.local or FASES[m.etapa].name)+" · "+m.estado,x,229,13,PALIDO)
     texto(s,"Próximo passo",x,261,14,AMBAR,"forte")
     for n,l in enumerate(linhas(m.passo,412,16)[:4]):texto(s,l,x,285+n*20,16,OSSO)
     texto(s,"Recebido" if m.estado=="Concluída" else "Recompensa",x,378,14,AMBAR,"forte")
@@ -339,11 +419,12 @@ def capitulo(a,s):
     j=a.jogo
     s.blit(imagem(f"fundo_{j.etapa}.jpg",960,540),(0,0))
     s.blit(placa(960,540,116),(0,0))
-    painel(s,(60,288,840,183))
-    texto(s,"TRAVESSIA   "+ROMANOS[j.etapa],83,304,14,AMBAR,"forte")
-    texto(s,j.fase.name,81,330,37,OSSO,"titulo")
-    paragrafo(s,ENTRADAS[j.etapa],83,389,780,18)
-    texto(s,"Enter   ·   continuar",873,443,14,PALIDO,"normal","right")
+    painel(s,(60,270,840,213))
+    texto(s,"TRAVESSIA   "+ROMANOS[j.etapa],83,287,14,AMBAR,"forte")
+    texto(s,f"{j.restauradas}/4 raízes restauradas",873,287,14,PALIDO,"forte","right")
+    texto(s,j.fase.name,81,314,37,OSSO,"titulo")
+    paragrafo(s,texto_travessia(j),83,376,780,18)
+    texto(s,"Enter   ·   continuar",873,453,14,PALIDO,"normal","right")
 
 
 def fim(a,s):
@@ -357,16 +438,19 @@ def fim(a,s):
         return
     chave=j.estado
     titulo,msg=FINAL[chave]
-    if chave=='vitoria':
-        from .resgates import mensagem_final
-        titulo='A floresta responde';msg=mensagem_final(j)
     livro(a,s,titulo,"DESFECHO")
-    y = paragrafo(s,msg,82,146,770,20)
-    desdobramento = epilogo(j) if chave == "vitoria" else ""
-    if desdobramento:
-        y = paragrafo(s,desdobramento,82,y+14,765,17,PALIDO)
+    y = paragrafo(s,msg,82,143,770,19)
+    if chave == "vitoria":
+        from .resgates import mensagem_final
+
+        y = paragrafo(s,mensagem_final(j),82,y+8,765,17,PALIDO)
+        desdobramento = epilogo(j)
+        if desdobramento:
+            y = paragrafo(s,desdobramento,82,y+8,765,15,PALIDO)
     texto(s,f"{j.restauradas} raízes acesas    ·    {j.pontuacao} pontos    ·    {int(j.tempo//60)} min {int(j.tempo%60):02d} s",83,y+20,17,AMBAR,"forte")
     opcoes(a,s,a.fim_nomes(),77,max(342,y+73),400,40)
+    if a.resultados_pendentes and a.mem.aviso:
+        texto(s,a.mem.aviso,82,465,15,AMBAR)
 
 
 def recordes(a,s):

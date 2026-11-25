@@ -28,7 +28,7 @@ CORTES = {
     'aurora':Corte(.09,.21,.49,106,3),
 }
 
-# O segundo perfil fica restrito à oficina de armas até o parecer humano.
+# Perfil de alcance longo, com preparação e recuperação maiores.
 AGULHA = {
     'avanco': Corte(.08, .17, .55, 132, 4),
     'corte1': Corte(.07, .13, .35, 102, 2),
@@ -43,7 +43,7 @@ LUZ_ARMAS={nome:{n:replace(p,dano=p.dano*2,alcance=p.alcance+16) for n,p in perf
 
 class Arma:
     """Um toque solicita um golpe. Cada alvo pode ser atingido uma vez por arco."""
-    def __init__(self):
+    def __init__(self, equipamento='espinho'):
         self.tipo = ""
         self.face = 1
         self.tempo = 0.
@@ -54,7 +54,7 @@ class Arma:
         self.pedir_queda = False
         self.pedir_avanco = False
         self.rebote = 0.
-        self.equipamento = 'espinho'
+        self.equipamento = equipamento
         self.historico=[];self.luminoso=False
         self.pedir_forte=self.pedir_luminoso=False
 
@@ -508,6 +508,10 @@ class Inimigo:
                 self.estado, self.t = "recuo", .38 if self.recuo_ferida else .28
         return sons, dano
 
+    def dano_corte(self, arma, lume):
+        fator = 2.5 if self.tipo == "carabideo" and getattr(lume, "tanino", False) else 1.
+        return arma.perfil.dano * getattr(lume, "bonus_dano", 1.) * fator
+
     def acertar(self, arma, area, clarao, lume):
         pulso = clarao and Vetor(self.rect.center).distance_to(lume.rect.center) < 214
         corte = arma.perfil is not None and area is not None and area.colliderect(self.rect) and self.ultimo_corte != arma.serie
@@ -521,11 +525,10 @@ class Inimigo:
         self.flash = .20
         if blindado:
             return "bloqueio"
-        fator=2.5 if self.tipo=="carabideo" and getattr(lume,"tanino",False) else 1.
         if pulso and self.tipo=="carabideo":
             return "bloqueio"
         dano_luz={"morcego":3,"sombra":3,"aranha":2,"vespa":1,"cobra":1}
-        self.vida -= dano_luz[self.tipo] if pulso else arma.perfil.dano*getattr(lume, "bonus_dano", 1.)*fator
+        self.vida -= dano_luz[self.tipo] if pulso else self.dano_corte(arma, lume)
         self.ativo = self.vida > 0
         if not self.ativo:
             self.projeteis.clear()

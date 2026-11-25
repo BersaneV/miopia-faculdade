@@ -4,6 +4,7 @@ import os
 import sqlite3
 import sys
 from pathlib import Path
+from .controles import carregar
 
 PADRAO = {"musica":.56,"brilho":1,"efeitos":.85,"mudo":False,"dificuldade":"normal"}
 def pasta_dados():
@@ -32,6 +33,8 @@ class Memoria:
             self.criar()
         self.prefs=dict(PADRAO)
         dados=self.ler("preferencias")
+        self.prefs["teclas"] = carregar(dados.get("teclas")) if isinstance(dados, dict) else {}
+        self.prefs.update(texto=100, contraste=False, claroes_suaves=False)
         if isinstance(dados,dict):
             for k in ("musica","efeitos"):
                 if isinstance(dados.get(k),(float,int)):
@@ -41,6 +44,10 @@ class Memoria:
             if dados.get("dificuldade") in ("fácil","normal","difícil"):
                 self.prefs["dificuldade"]=dados["dificuldade"]
             self.prefs["mudo"]=dados.get("mudo") is True
+            if dados.get("texto") in (100, 115, 125):
+                self.prefs["texto"] = int(dados["texto"])
+            for ajuste in ("contraste", "claroes_suaves"):
+                self.prefs[ajuste] = dados.get(ajuste) is True
 
     def criar(self):
         with self.db:
@@ -60,19 +67,29 @@ class Memoria:
     def guardar(self,chave,valor):
         try:
             with self.db:
-                self.db.execute("INSERT OR REPLACE INTO estado VALUES (?,?)",(chave,json.dumps(valor,ensure_ascii=False)))
+                self._gravar(chave, valor)
         except sqlite3.Error:
             self.aviso="Não foi possível salvar neste dispositivo."
+            return False
+        return True
 
-    def terminar(self,jogo):
+    def _gravar(self, chave, valor):
+        self.db.execute("INSERT OR REPLACE INTO estado VALUES (?,?)", (chave, json.dumps(valor, ensure_ascii=False)))
+
+    def guardar_campanha(self, dados, resultados):
+        if not resultados:
+            return self.guardar("campanha", dados)
         try:
             with self.db:
-                self.db.execute("INSERT INTO tentativas(modo,resultado,etapa,pontos,segundos) VALUES (?,?,?,?,?)",
-                                (jogo.modo,jogo.estado,jogo.volta*4+jogo.etapa+1,jogo.pontuacao,jogo.tempo))
-                if jogo.modo=="historia" and jogo.estado=="vitoria":
-                    self.db.execute("DELETE FROM estado WHERE chave='campanha'")
+                self.db.executemany("INSERT INTO tentativas(modo,resultado,etapa,pontos,segundos) VALUES (?,?,?,?,?)",
+                                    resultados)
+                self._gravar("campanha", dados)
         except sqlite3.Error:
-            self.aviso="O resultado não pôde ser gravado."
+            self.aviso = "O resultado não pôde ser gravado. O save anterior foi preservado."
+            return False
+        if self.aviso.startswith("O resultado não pôde ser gravado."):
+            self.aviso = ""
+        return True
 
     def recordes(self):
         return self.db.execute("""SELECT modo, COUNT(*), MAX(pontos), MAX(etapa)

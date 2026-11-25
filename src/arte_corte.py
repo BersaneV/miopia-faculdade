@@ -4,7 +4,7 @@ import math
 
 import pygame
 from .arte_combate import inimigo, projeteis
-from . import corte_vertical as corte
+from . import arquivo_casca, arte_fio, corte_vertical as corte, fio_corte
 from .ilustracao import AMBAR, OSSO, PALIDO, TEAL, brilho, imagem, losango, manivela, sprite, texto
 
 
@@ -59,14 +59,133 @@ def suportes():
             pygame.draw.line(out,(77,117,115),(x-30,y),(x+53,y-2),1)
     return out
 
+@lru_cache(maxsize=2)
+def janela_arquivo(fechada):
+    janela=pygame.Surface((171,111),pygame.SRCALPHA)
+    if not fechada:
+        pygame.draw.polygon(janela,(224,209,141,70),[(26,24),(44,15),(151,91),(100,103)])
+        pygame.draw.line(janela,(243,218,146,90),(41,22),(137,89),2)
+    moldura=pygame.Rect(17,13,35,33)
+    pygame.draw.rect(janela,(70,52,35),moldura,border_radius=5)
+    pygame.draw.rect(janela,(139,114,70),moldura,3,border_radius=5)
+    for y in (21,28,35):
+        cor=(100,81,52) if fechada else (206,180,118)
+        pygame.draw.line(janela,cor,(22,y),(47,y+2),4)
+    return janela
+
+
+def casulo_mola(camada, j, cx):
+    x = corte.CASULO.centerx-cx
+    y = corte.CASULO.bottom
+    pressao = max(0., min(1., (j.lume.arma.rebote-.30)/.16)) if abs(j.lume.rect.centerx-corte.CASULO_X) < 66 else 0.
+    topo = y-28+round(9*pressao)
+    ramo = [(x-22,corte.NICHO_POCO+12),(x-34,1345),(x-28,1428),(x-17,y-11)]
+    pygame.draw.lines(camada, (110, 124, 91), False, ramo, 2)
+    pygame.draw.lines(camada, (101, 96, 67), False, [(x-26,y),(x-16,y-8),(x+16,y-8),(x+26,y)], 3)
+    pygame.draw.ellipse(camada, (92, 118, 95), (x-20,topo,40,y-topo-1))
+    pygame.draw.ellipse(camada, (156, 192, 148), (x-20,topo,40,y-topo-1), 2)
+    for faixa in (7, 14):
+        yy = min(y-4, topo+faixa)
+        pygame.draw.arc(camada, (220, 197, 127), (x-18,yy-4,36,9), math.pi, math.tau, 2)
+    pygame.draw.lines(camada, PALIDO, False, [(x-8,topo-7),(x,topo-13),(x+8,topo-7)], 2)
+
+
+@lru_cache(maxsize=1)
+def folha_comporta():
+    """Lâmina de casca em coordenadas locais, recortada pelo trilho."""
+    w, h = corte.COMPORTA.size
+    folha = pygame.Surface((w, h))
+    folha.fill((48, 49, 37))
+    for n, x in enumerate(range(4, w-3, 7)):
+        veta = [(x+round(2*math.sin(y*.085+n)), y) for y in range(0, h+1, 8)]
+        pygame.draw.lines(folha, (76+4*(n%3), 69+3*(n%3), 47), False, veta, 6)
+        pygame.draw.lines(folha, (117, 103, 67), False, veta, 1)
+    for y in (39, 99, h-15):
+        pygame.draw.rect(folha, (57, 70, 60), (1, y, w-2, 10), border_radius=2)
+        pygame.draw.line(folha, (142, 124, 76), (2, y+1), (w-3, y+1), 2)
+        for x in (6, w-7):
+            pygame.draw.circle(folha, (157, 143, 93), (x, y+5), 2)
+    pygame.draw.line(folha, (188, 159, 99), (1, h-1), (w-2, h-1), 2)
+    return folha
+
+
+def desenhar_comporta(camada, j, cx, roda, t):
+    moldura = corte.COMPORTA.move(-cx, 0)
+    painel = corte.painel_comporta(j).move(-cx, 0)
+    fundo = moldura.bottom
+    cabo = ((moldura.centerx, moldura.top-12), (moldura.right+35, moldura.top+20),
+            (roda.x-cx, roda.y-32))
+    pygame.draw.lines(camada, (47, 53, 43), False, cabo, 4)
+    pygame.draw.lines(camada, (131, 117, 75), False, cabo, 1)
+    pygame.draw.circle(camada, (147, 124, 73), cabo[0], 8, 2)
+
+    if painel.h:
+        folha = folha_comporta()
+        camada.blit(folha, painel.topleft,
+                    pygame.Rect(0, moldura.h-painel.h, moldura.w, painel.h))
+    vao = fundo-painel.bottom
+    if vao >= 5:
+        largura = moldura.w+40+round(vao*.56)
+        inicio = moldura.centerx-largura//2
+        for n in range(12):
+            x = inicio+largura-(round(t*74)+n*23)%largura
+            y = fundo-2-min(vao-2, 3+(n*7)%20)
+            pygame.draw.aaline(camada, (72+8*(n%3), 125+8*(n%3), 121+5*(n%3)),
+                             (x-15, y), (x+3, y-1))
+        if j.comporta_inicio is not None:
+            for n in range(5):
+                fase = (t*3+n*.21)%1.
+                x = moldura.left-round(5+fase*31)
+                pygame.draw.circle(camada, (148, 196, 177), (x, fundo-4-round(40*fase*(1.-fase))), 2)
+
+    for x in (moldura.left-2, moldura.right+1):
+        pygame.draw.line(camada, (50, 57, 49), (x, moldura.top-4), (x, fundo-2), 5)
+        pygame.draw.line(camada, (139, 122, 79), (x, moldura.top), (x, fundo-1), 1)
+        for y in (moldura.top+9, fundo-24):
+            pygame.draw.circle(camada, (167, 146, 97), (x, y), 2)
+        if vao >= 5:
+            pygame.draw.lines(camada, (115, 159, 139), False,
+                              [(x+2, fundo-33),(x-1, fundo-21),(x+1, fundo-12),(x, fundo-2)], 2)
+
+
 def desenhar_ponto(camada,o,j,cx):
     x=o.x-cx
+    if o.tipo in ("fio_corte", "carretel_fio"):
+        arte_fio.objeto(camada, o, j, cx, j.tempo)
+        return
+    if o.tipo == "pavio_nicho":
+        brilho(camada, (x, o.y-12), 15)
+        sprite(camada, "item_pavio", x, o.y-2, 31, 25)
+        return
     if o.tipo=='lanterna':
         from .encontros import desenhar
         desenhar(camada,o,j,cx);return
     if o.tipo=='sobrevivente':
         from .arte_resgates import pessoa
         pessoa(camada,o,j,cx,j.tempo)
+        return
+    if o.tipo=='veneziana':
+        y=o.y-28
+        pygame.draw.line(camada,(94,77,55),(x,o.y),(x,y),3)
+        pygame.draw.circle(camada,(170,140,83),(x,y),6,2)
+        return
+    if o.tipo=='sinal_arquivo':
+        y=arquivo_casca.SINAIS[1]
+        pygame.draw.rect(camada,(45,58,42),(x-23,y-7,46,14),border_radius=4)
+        for inicio,comprimento in ((-18,6),(-6,6),(6,15)):
+            pygame.draw.line(camada,(186,237,183),(x+inicio,y),(x+inicio+comprimento,y),3)
+        return
+    if o.tipo=='atalho_raiz':
+        cor=(149,169,108) if corte.RAIZ_DUAS_BOCAS in j.cartografia else (162,122,77)
+        if o.id=='raiz_boca_alta':
+            pygame.draw.lines(camada,cor,False,[(x-19,o.y-25),(x-13,o.y-14),(x,o.y-6),
+                                               (x+13,o.y-14),(x+19,o.y-25)],3)
+        else:
+            pygame.draw.lines(camada,cor,False,[(x-13,o.y-29),(x-8,o.y-36),(x+8,o.y-36),
+                                               (x+13,o.y-29)],2)
+            if corte.RAIZ_DUAS_BOCAS not in j.cartografia:
+                pygame.draw.rect(camada,cor,(x-11,o.y-34,22,24),3,border_radius=5)
+                losango(camada,x,o.y-22,6,AMBAR)
         return
     if o.tipo in ('jardim','orvalho_jardim'):
         from .arte_jardim import objeto
@@ -88,8 +207,19 @@ def desenhar_ponto(camada,o,j,cx):
             losango(camada,x,o.y-11,6,AMBAR,False)
         return
     if o.tipo=="valvula":
+        if o.id == "comporta_viveiro":
+            sprite(camada, "obj_valvula", x, o.y, 46, 53)
+            eixo = round(x), o.y-32
+            angulo = -2.5 + math.pi*corte.abertura_comporta(j)
+            pino = eixo[0]+round(17*math.cos(angulo)), eixo[1]+round(17*math.sin(angulo))
+            pygame.draw.line(camada, (38, 44, 38), eixo, pino, 5)
+            pygame.draw.line(camada, AMBAR, eixo, pino, 2)
+            pygame.draw.circle(camada, OSSO, pino, 3)
+            return
         manivela(camada,x,o.y,46,53,j.manivela_girada(o))
         return
+    if o.id == "placa_viveiro":
+        arte_fio.berco(camada, o, cx)
     item={"refugio":"refugio", "registro":"registro"}[o.tipo]
     w,h={"refugio":(72,61),"registro":(32,25)}[o.tipo]
     sprite(camada,"obj_"+item,x,o.y,w,h)
@@ -97,6 +227,7 @@ def desenhar_ponto(camada,o,j,cx):
 
 def desenhar(s,j,t,nivel_brilho):
     from .paisagem import lume, terreno, aplicar_nevoa, compor_luz, capturar_fundo
+    from .ilustracao import claroes_suaves
     bg, camada, luz=camadas()
     cx,cy=round(j.camera),round(j.camera_y)
     tela=pygame.Rect(0,cy,960,540)
@@ -106,11 +237,23 @@ def desenhar(s,j,t,nivel_brilho):
     camada.blit(bg,(0,cy),recorte)
     fundo_visao=capturar_fundo(camada,cy)
     camada.blit(suportes(),(0,cy),pygame.Rect(cx,cy,960,540))
+    x=corte.RAIZ_X-cx
+    alto,baixo=corte.PISO_ARQUIVO,corte.PISO_POCO
+    if cy<baixo and cy+540>alto-36 and -24<x<984:
+        for lado in (-1,1):
+            pontos=[(x+lado*19,alto-35),(x+lado*23,alto+30),
+                    (x+lado*20,baixo-45),(x+lado*14,baixo-8)]
+            pygame.draw.lines(camada,(64,73,52),False,pontos,7)
+            pygame.draw.lines(camada,(105,110,76),False,pontos,2)
+        if corte.RAIZ_DUAS_BOCAS in j.cartografia:
+            pygame.draw.line(camada,(141,146,85),(x,alto-6),(x,baixo-32),3)
     if cx+960>2432:
         from .arte_jardim import detalhes
         detalhes(camada,j,cx)
     if cy+540>1060 and cy<1260:
         sprite(camada,"obj_refugio",118-cx,1173,77,63)
+        if cx<379:
+            camada.blit(janela_arquivo(arquivo_casca.FECHADA in j.cartografia),(208-cx,1068))
     if cy+540>1770:
         for n in range(4):
             y=1802+n*6
@@ -124,15 +267,20 @@ def desenhar(s,j,t,nivel_brilho):
     pygame.draw.circle(camada,(90,79,50),(1040-cx,306),11,3)
     if "ralo_aberto" not in j.cartografia:
         pygame.draw.lines(camada,(76,73,54),False,[(1015-cx,1825),(1023-cx,1835),(1061-cx,1835),(1068-cx,1825)],4)
-        if abs(j.lume.rect.centerx-1040)<175 and j.lume.rect.bottom>1700:
-            texto(camada,"Contrapeso preso · abra o ralo a oeste",1040-cx,1781,12,PALIDO,"normal","centerx")
     for tr in j.solidos:
         if tr.rect.bottom+30>=cy and tr.rect.top-18<=cy+540:
+            if tr.tipo=="tranca" and tr.rect.topleft == corte.COMPORTA.topleft:
+                continue
             i=3 if tr.rect.y>=1200 else 0
             terreno(camada,tr,cx,i)
+    if cy-20 < corte.CASULO.bottom < cy+560 and cx-30 < corte.CASULO.centerx < cx+990:
+        casulo_mola(camada, j, cx)
+    arte_fio.baixo(camada, j, cx, cy, t)
     from .sinalizacao import desenhar as descidas
     descidas(camada,j,cx)
     for o in j.objetos:
+        if o.id == "comporta_viveiro" and tela.colliderect(corte.COMPORTA.move(-cx,0).inflate(270,40)):
+            desenhar_comporta(camada, j, cx, o, t)
         if cy-10<o.y<cy+630 and cx-60<o.x<cx+1020:
             desenhar_ponto(camada,o,j,cx)
     for n in range(24):
@@ -155,7 +303,8 @@ def desenhar(s,j,t,nivel_brilho):
     aplicar_nevoa(camada,luz,cy,fundo_visao,nivel)
     for v in j.vestigios:
         if v.raio(t)>16:
-            brilho(camada,(v.x-cx,v.y),20)
+            if not claroes_suaves():
+                brilho(camada,(v.x-cx,v.y),20)
     for e in j.inimigos:
         projeteis(camada,e,cx,j.lume,j.raio,j.visivel)
     lume(camada,j.lume,cx,t)
@@ -210,7 +359,7 @@ def mapa(s,j,rect):
         pygame.draw.rect(s,tuple(min(255,v+61) for v in cor),pg,1)
     if {"viveiro_aberto","viu_cisterna","viu_viveiro"}<=vistos:
         pygame.draw.rect(s,(130,155,128),faixa(1350,1740,167,76))
-    for tr in corte.terrenos("viveiro_aberto" in vistos):
+    for tr in corte.terrenos("viveiro_aberto" in vistos, passarela_fio=fio_corte.REPARADA in vistos):
         if tr.tipo in ("parede","tranca"): continue
         ident=corte.setor(tr.rect.y,tr.rect.centerx)[0]
         if "viu_"+ident not in vistos: continue

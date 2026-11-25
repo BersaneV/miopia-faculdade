@@ -53,7 +53,7 @@ def preparar(e, corpo, eventos, continuacao=False):
 
 def _terminar(e, eventos):
     # Uma janela sem contato existe mesmo entre os dois golpes da segunda fase.
-    e._mudar('freio_casco', .30 if e.combo_restante else .76)
+    e._mudar('freio_casco', (.30 if e.combo_restante else .76)*e.ritmo.recuperacao)
 
 
 def _tabua(e, eventos):
@@ -97,7 +97,7 @@ def atualizar(e, dt, corpo, direcao, eventos):
             eventos.append('dano_jogador')
     e.ondas[:] = [o for o in e.ondas if o.tempo > 0 and e.esq - 30 < o.x < e.dir + 30]
 
-    if e.fase == 1 and e.vida <= 50 and e.estado not in ('aberto', 'flor', 'rastro', 'investida_seiva'):
+    if e.fase == 1 and (e.progresso or e.vida <= 50) and e.estado not in ('aberto', 'flor', 'rastro', 'investida_seiva'):
         e.fase = 2
         e.combo_restante = 0
         e.ondas.clear()

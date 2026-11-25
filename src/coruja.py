@@ -69,7 +69,7 @@ def atualizar(e, dt, corpo, ruido, eventos):
         elif p.tempo > 0 and e.esq - 30 < p.x < e.dir + 30 and e.chao - 300 < p.y < e.chao + 10:
             vivos.append(p)
     e.penas[:] = vivos
-    if e.fase == 1 and e.vida <= 50 and e.estado != 'aberto':
+    if e.fase == 1 and (e.progresso or e.vida <= 50) and e.estado != 'aberto':
         e.fase = 2
         e.combo_coruja = 0
         e.penas.clear()
@@ -120,8 +120,6 @@ def atualizar(e, dt, corpo, ruido, eventos):
     elif e.estado == 'investida':
         if e.tecnica == 'sino':
             e._voar(dt, corpo, eventos, 510)
-            if e.estado == 'aberto':
-                e.tempo = 2.8
         else:
             # Diagonal até a faixa anunciada, sem perseguir movimento posterior.
             dx, dy = e.destino - e.x, e.alvo_y - e.y
@@ -133,7 +131,7 @@ def atualizar(e, dt, corpo, ruido, eventos):
             faixa = pygame.FRect(e.x - 32, e.y - 12, 64, 23 if e.tecnica == 'garra' else 19)
             e._colisao(corpo, faixa, eventos)
             if distancia <= passo + .01 or e.tempo <= 0:
-                e._mudar('recolhe_coruja', .36 if e.combo_coruja else .65)
+                e._mudar('recolhe_coruja', (.36 if e.combo_coruja else .65)*e.ritmo.recuperacao)
     elif e.estado == 'recolhe_coruja':
         e.y = aproximar(e.y, e.chao - 116, dt * 170)
         if e.tempo <= 0:

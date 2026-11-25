@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 import math
 from .fases import CHAO, Objeto
+from . import rotas_borda
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,73 @@ PESSOAS=(
 )
 POR_ID={p.id:p for p in PESSOAS}
 
+TRECHOS_TRILHA = {
+    "tila": "a grade e a forquilha",
+    "bento": "a ponte e as raízes do Córrego",
+    "aru": "a oficina e o caminho do Jardim",
+}
+EFEITOS_MANTIMENTOS = {
+    "tila": "12 s de visão ampliada",
+    "bento": "retarda asas e desfaz projéteis",
+    "aru": "absorve um ataque de criatura",
+}
+
+PREFIXO_JARDIM = "jardim_turno_"
+
+
+@dataclass(frozen=True)
+class Posto:
+    pessoa: str
+    marco: str
+    posicao: tuple
+    sinal: tuple
+    titulo: str
+    registro: str
+    trilha: str
+    bancada: str
+
+
+POSTOS = {
+    p.pessoa: p for p in (
+        Posto("tila", "jardim_aberto", (2648, 790), (2755, 639, 148),
+              "Tila na ponte do Jardim", "Tila desatou a última amarra dos casulos e ficou junto à ponte.",
+              "Antes eu contava gotas para esperar o perigo passar. Agora conto dois saltos. "
+              "Deixei meu sinal acima da ponte, entre os primeiros galhos.",
+              "Desatei a seda da ponte. Guardei o pedaço seco para forrar os berços quando a água subir. "
+              "Hoje eu consegui cortar um nó sem contar as gotas."),
+        Posto("bento", "jardim_calha", (3665, 1828), (3570, 1788, 112),
+              "Bento na calha do Jardim", "Bento mediu a altura da água e vigiou a calha pelo lado de baixo.",
+              "Minha régua nova ficou pendurada na calha. A marca de luz aponta para oeste. "
+              "A água deve chegar à nascente antes de nós dois.",
+              "Na cheia eu levava a régua a todo lugar. Hoje deixei uma para quem vier depois. "
+              "Dois riscos na madeira indicam até onde a calha pode encher."),
+        Posto("aru", "jardim_plantado", (3136, 1828), (2660, 1787, 112),
+              "Aru junto à nascente", "Aru cuida dos brotos que Lume plantou junto à nascente.",
+              "Eu trazia as sementes escondidas no bolso. Agora a primeira muda fica onde todos conseguem vê-la. "
+              "Marquei a volta a oeste para quem vier cuidar dela.",
+              "A primeira folha está de pé. Vou trazer uma bacia da oficina para repartir o orvalho. "
+              "Se cada berço receber um pouco, posso secar os bolsos."),
+    )
+}
+
+
+def postos_ativos(j):
+    if not j.em_vertical or "jardim_aberto" not in j.cartografia:
+        return ()
+    return tuple(p for p in POSTOS.values() if p.pessoa in j.sobreviventes and p.marco in j.cartografia)
+
+
+def rotulos_trabalho(j, ident):
+    from .narrativa import POR_ID as itens
+
+    item = itens[POR_ID[ident].item]
+    texto = (f"{item.nome.lower()} já recebido" if j.sobreviventes[ident]["premio"]
+             else f"1 {item.nome}, {EFEITOS_MANTIMENTOS[ident]}")
+    if ident == "tila" and j.sobreviventes[ident]["premio"]:
+        texto = "pavio já recebido"
+    apoio = "Ajudar Mimo no abrigo" if ident == "tila" else "Trabalhar no abrigo"
+    return (f"Marcar {TRECHOS_TRILHA[ident]} com luz", f"{apoio} · {texto}")
+
 
 def disponivel(j,p):
     if p.id in j.sobreviventes:return False
@@ -47,12 +115,26 @@ def objetos(j):
     out=[]
     for p in PESSOAS:
         if disponivel(j,p):out.append(Objeto('resgate_'+p.id,'sobrevivente',*p.ponto,'Libertar '+p.nome))
-        elif p.id in j.sobreviventes and not j.em_vertical and j.etapa==0:
-            out.append(Objeto('casa_'+p.id,'sobrevivente',*p.abrigo,'Conversar com '+p.nome))
+        elif p.id in j.sobreviventes and not j.em_vertical:
+            posto = rotas_borda.posto(j, p.id)
+            if posto is not None and j.etapa == posto.etapa:
+                out.append(Objeto(rotas_borda.PREFIXO+p.id,'sobrevivente',*posto.posicao,'Conversar com '+p.nome))
+            elif posto is None and j.etapa == 0:
+                out.append(Objeto('casa_'+p.id,'sobrevivente',*p.abrigo,'Conversar com '+p.nome))
+    out.extend(Objeto(PREFIXO_JARDIM+p.pessoa, 'sobrevivente', *p.posicao,
+                      'Conversar com '+POR_ID[p.pessoa].nome) for p in postos_ativos(j))
     return tuple(out)
 
 
 def conversar(j,o):
+    if o.id.startswith(PREFIXO_JARDIM):
+        posto = POSTOS[o.id.removeprefix(PREFIXO_JARDIM)]
+        pessoa = POR_ID[posto.pessoa]
+        oficio = j.sobreviventes[pessoa.id]['oficio']
+        j.memorizar(posto.titulo, posto.registro)
+        j.dialogo = (pessoa.nome, posto.trilha if oficio == 'trilha' else posto.bancada)
+        j.eventos.append('pagina')
+        return
     ident=o.id.split('_',1)[1];p=POR_ID[ident]
     if ident not in j.sobreviventes:
         if not disponivel(j,p):return
@@ -61,11 +143,14 @@ def conversar(j,o):
         j.eventos.append('resgate')
         j.memorizar(p.nome+' voltou',p.encontro)
         texto=p.encontro
+    elif o.id.startswith(rotas_borda.PREFIXO):
+        texto = rotas_borda.conversar(j, ident)
     else:
         oficio=j.sobreviventes[ident]['oficio']
         texto=p.trilha if oficio=='trilha' else p.casa if oficio=='abrigo' else p.encontro
     j.escolha_resgate=ident
-    j.dialogo=(p.nome,texto+' Escolha: luz permanente em pontos da trilha, ou um mantimento único preparado no abrigo. Você pode mudar o trabalho depois; o mantimento não se repete.')
+    j.dialogo = (p.nome, texto + ' Posso mudar de trabalho depois. Se eu deixar a trilha, recolho minhas luzes. '
+                'Só tenho um mantimento para entregar.')
     j.eventos.append('pagina')
 
 
@@ -74,12 +159,23 @@ def escolher(j,indice):
     if ident not in j.sobreviventes or indice not in (0,1):return False
     p=POR_ID[ident];estado=j.sobreviventes[ident]
     estado['oficio']='trilha' if indice==0 else 'abrigo'
-    if indice==1 and not estado['premio']:
+    entregou = indice == 1 and not estado['premio']
+    if entregou:
         j.bolsa.receber(p.item,1);estado['premio']=True
         j.eventos.append('coleta')
     j.memorizar('Escolha de '+p.nome,p.trilha if indice==0 else p.casa)
     j.fechar_dialogo()
-    j.notificar(p.nome+(': trilha marcada com luz.' if indice==0 else ': mantimento preparado; não se repete ao trocar o trabalho.'),6.)
+    if indice == 0:
+        mensagem = f"{p.nome} vai marcar {TRECHOS_TRILHA[ident]} com luz."
+        if ident in rotas_borda.POSTOS:
+            posto = rotas_borda.POSTOS[ident]
+            mensagem += " " + posto.pista
+            j.memorizar("Onde encontrar " + p.nome, posto.pista)
+    elif entregou:
+        mensagem = f"{p.nome} preparou um mantimento para a viagem."
+    else:
+        mensagem = f"{p.nome} volta ao trabalho no abrigo."
+    j.notificar(mensagem, 6.)
     return True
 
 
@@ -107,22 +203,53 @@ def fontes(j):
     else:
         for ident,estado in j.sobreviventes.items():
             p=POR_ID[ident]
-            if not j.em_vertical and j.etapa==0:pontos.append((p.abrigo[0],p.abrigo[1]-35,82))
+            if not j.em_vertical and j.etapa==0 and rotas_borda.posto(j,p.id) is None:
+                pontos.append((p.abrigo[0],p.abrigo[1]-35,82))
             if estado['oficio']!='trilha':continue
             if ident=='tila' and not j.em_vertical and j.etapa==0:pontos.extend((x,y,150) for x,y in ((1640,415),(2190,410),(3350,230)))
             if ident=='bento' and not j.em_vertical and j.etapa==1:pontos.extend((x,y,150) for x,y in ((1290,407),(2600,900),(3020,1070)))
             if ident=='aru' and j.em_vertical:pontos.extend((x,y,150) for x,y in ((2280,755),(2700,755),(3270,370)))
     if j.em_vertical and 'jardim_plantado' in j.cartografia:pontos.append((3020,1790,180))
+    pontos.extend(p.sinal for p in postos_ativos(j) if j.sobreviventes[p.pessoa]['oficio'] == 'trilha')
+    if not j.em_vertical:
+        for ident in rotas_borda.POSTOS:
+            posto = rotas_borda.posto(j, ident)
+            if posto is not None and j.etapa == posto.etapa:
+                x,y = posto.posicao
+                pontos.append((x,y-30,105))
     cx,cy=j.camera,j.camera_y
     visiveis=[p for p in pontos if cx-p[2]<=p[0]<=cx+960+p[2] and cy-p[2]<=p[1]<=cy+540+p[2]]
     return sorted(visiveis,key=lambda p:math.dist(p[:2],j.lume.rect.center))[:4]
 
 
 def mensagem_final(j):
-    n=len(j.sobreviventes)
-    if n==3:return 'Tila marca a primeira curva. Bento conta três luzes e ri da própria conta. Aru planta a semente onde antes só havia fuligem. A colônia voltou por caminhos que agora consegue ver.'
-    if n:return f'{n} sobrevivente(s) responderam ao chamado. As raízes voltaram a correr, mas faltam vozes no abrigo. Lume pode retornar aos desvios e buscar quem ficou.'
-    return 'As quatro raízes voltaram a correr. No abrigo ainda há três lugares vazios. A floresta reacesa permite procurar os sinais que Lume deixou para depois.'
+    presentes = [p for p in PESSOAS if p.id in j.sobreviventes]
+    if not presentes:
+        return "Mimo deixa três lugares vazios no abrigo. Os sinais de Tila, Bento e Aru ainda podem ser seguidos pelos caminhos reabertos."
+    quem_guia = next((p.nome for p in presentes if j.sobreviventes[p.id]["oficio"] == "trilha"), None)
+    if quem_guia:
+        trabalho = f" {quem_guia} marcou a volta com luz."
+    elif any(j.sobreviventes[p.id]["oficio"] == "abrigo" for p in presentes):
+        trabalho = " Há mantimentos no abrigo."
+    else:
+        trabalho = ""
+    if len(presentes) == 3:
+        if "jardim_plantado" in j.cartografia:
+            jardim = " Na estufa, a primeira muda já recebe água."
+        elif "jardim_aberto" in j.cartografia:
+            jardim = " O caminho da estufa está aberto. A nascente espera pelas sementes."
+        else:
+            jardim = " Aru guardou as sementes. Os três podem abrir a estufa."
+        return "Tila, Bento e Aru voltaram." + trabalho + jardim
+    nomes = " e ".join(p.nome for p in presentes)
+    if len(presentes) == 1:
+        chegada = f"{nomes} voltou."
+        reserva = " No abrigo, Mimo guarda dois lugares."
+    else:
+        chegada = f"{nomes} voltaram."
+        falta = next(p.nome for p in PESSOAS if p.id not in j.sobreviventes)
+        reserva = f" No abrigo, Mimo guarda um lugar para {falta}."
+    return chegada + trabalho + reserva
 
 
 def orientar(j):

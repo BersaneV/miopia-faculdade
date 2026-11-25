@@ -49,6 +49,14 @@ class Bolsa:
     def quantidade(self):
         return self.estoque[self.equipado]
 
+    def efeitos_ativos(self, tempo):
+        """Efeitos que continuam enquanto Lume troca o item equipado."""
+        efeitos = [f"{nome} {math.ceil(ate-tempo)} s" for nome, ate in (
+            ("Pavio", self.luz_ate), ("Tanino", self.tanino_ate)) if ate > tempo]
+        if self.escudo:
+            efeitos.append("Casulo armado")
+        return efeitos
+
     @property
     def bonus_dano(self):
         return 1.25 if self.estoque["espinho"] else 1.
@@ -144,12 +152,17 @@ class Bolsa:
             if not colocar(j):return None
             mensagem='Globo fixado permanentemente. Mesmo com o brilho vazio, a luz dele continua.';som='resgate'
         elif item == "polen":
-            from .ferramentas import espalhar_polen
-            afetados=espalhar_polen(j)
-            if not afetados:
-                j.notificar("Nenhuma asa ou projétil ao alcance à frente. O pólen foi guardado.")
+            from .ferramentas import DURACAO_POLEN, espalhar_polen
+            asas, projeteis = espalhar_polen(j)
+            if not (asas or projeteis):
+                j.notificar("Nada novo ao alcance à frente. O pólen foi guardado.")
                 return None
-            mensagem=f"Pólen · {afetados} alvo(s) atingido(s); asas lentas por 6 s."
+            efeitos = []
+            if asas:
+                efeitos.append(f"Asas lentas por {DURACAO_POLEN:g} s")
+            if projeteis:
+                efeitos.append("1 projétil desfeito" if projeteis == 1 else f"{projeteis} projéteis desfeitos")
+            mensagem = "Pólen · " + " · ".join(efeitos)
             som="abertura"
         else:
             if self.escuta_ate > j.tempo:
@@ -242,7 +255,7 @@ PEDIDOS = (
         "Os nomes nas cascas", "Nira", "Véspera",
         (("registro", "Leia o mapa enrolado no galho do berçário."),),
         "Leve a data do mapa a Véspera, junto dos ninhos altos.",
-        "Véspera tirou os pequenos dali antes do raio. No galho do berçário ficou um mapa enrolado. Leia a data para ela.",
+        "Apaguei a trilha do meu mapa quando a borda secou. Véspera tirou os pequenos antes do raio. A data ficou no galho do berçário. Leia para ela.",
         "Deixei um pavio junto às cascas. Primeiro preciso saber quando saímos. Leia a data no mapa deste galho.",
         "Duas luas antes do raio. Eu tinha razão em levar os pequenos. Leve meus pavios de pólen para enxergar o caminho.",
         "Agora canto só quando alguém responde. Os que eu tirei daqui foram com Mimo.",
@@ -253,7 +266,7 @@ PEDIDOS = (
         (("registro", "Examine a marca d'água no galho acima do canal."),
          ("ponte", "Drene o canal e solte a ponte com a lingueta.")),
         "Conte a Fio, na cabeceira da ponte, para onde a corrente vira.",
-        "Fio remendou três teias contra a corrente. Veja a marca no galho de cima e abra a ponte. Preciso que ela saiba quem fechou a água.",
+        "Brasa pediu água para o berçário e eu fechei o canal da borda. Fio passou três noites remendando a seda sem saber por quê. A marca no galho de cima guarda a altura antiga.",
         "A ponte precisa abrir. Procure também o sulco alto na casca. O limo mostra para que lado a água corria antes.",
         "O limo ficou do lado de fora. Foi Casca quem virou a água para o tronco. Leve esta concha. Ela devolve o lado de onde vêm os passos.",
         "Casca desceu para abrir o canal comigo. Hoje a seda aguenta a corrente sem partir.",
@@ -336,6 +349,8 @@ def ajuda_do_refugio(j, nome, texto):
             if "registro" in j.historico.get((j.volta, 0), set()):
                 return "Reconheço a data no mapa de Nira. Nessa noite pedi a Casca que fechasse a comporta. Queria encher o poço do berçário."
             return "Fui eu que pedi a Casca que fechasse a comporta. O poço central ia secar. Eu não via as teias de Fio desde a outra margem."
+        if "raiz" in j.flags:
+            return "Amanhã vou levar a primeira gota até a borda. Fio pode me mostrar a marca de onde a água chegava."
         if "contrapeso" in j.flags:
             return "Reconheço o sino. Ouvi isso do tronco tantas noites e achei que a Coruja guardava a entrada. Ela pedia água para fora."
         return "A comporta desviou a água para cá. Eu esperava encontrar o tronco cheio. Encoste na raiz e ouça o que ficou para trás."
@@ -343,8 +358,6 @@ def ajuda_do_refugio(j, nome, texto):
         j.flags.add("mantimento_candeia")
         _presentes(j, (("pavio", 1),))
         return "Eco me ensinou a chamar com dois sinais curtos. Tome um pavio. Acenda com F depois de escolher com Q, e veja os apoios na borda."
-    if nome == "Coruja":
-        return "Eu ouvia as comportas fecharem. Bati o sino, mas ninguém saía do tronco. Agora escuto as quatro raízes correndo ao mesmo tempo."
     return texto
 
 
@@ -373,23 +386,28 @@ def conversar(j, nome, texto_base):
                     texto = pedido.entregar
     else:
         texto = ajuda_do_refugio(j, nome, texto)
+    if nome == "Casca" and j.etapa == 1 and "raiz" in j.flags and "ponte" in j.flags:
+        from .corrego_historia import fala_da_margem
+
+        texto = fala_da_margem(j)
     # O recado completo permanece no diário. Quem conhece a travessia também
     # explica a ação atual, inclusive se Lume saltou a ponte sem abri-la.
-    de_casa = {
-        "Nira": "Marquei no mapa o caminho que ainda falta abrir.",
-        "Casca": "Fui eu que desviei a água da borda. Quero ajudar a devolvê-la.",
-        "Fio": "Preciso da ponte para levar os casulos pela margem.",
-        "Eco": "Minha família espera do outro lado. Vou mostrar o caminho.",
-        "Nó": "O sino é uma rota de volta para a guardiã.",
-    }
+    de_casa = {"Nira", "Casca", "Fio", "Eco", "Nó"}
     if nome in de_casa and j.modo == "historia" and not j.em_vertical:
-        from .orientacao import objetivo_atual
-        alvo = objetivo_atual(j)
-        if alvo:
-            j.memorizar("Caminho indicado por " + nome, alvo.detalhe)
-            entregou_agora = not entregue_antes and "pedido_entregue" in j.flags
-            if "chefe" not in j.flags and not entregou_agora:
-                texto = de_casa[nome] + " " + alvo.detalhe
+        from .orientacao import _superficie
+
+        alvo = _superficie(j)
+        j.memorizar("Caminho indicado por " + nome, alvo.detalhe)
+        entregou_agora = not entregue_antes and "pedido_entregue" in j.flags
+        if "chefe" not in j.flags and not entregou_agora:
+            texto += " " + alvo.detalhe
+    if nome == 'Véspera' and j.etapa == 0 and j.modo == 'historia' and not j.em_vertical:
+        from .arquivo_casca import entregar_a_vespera
+        if "raiz" in j.flags and texto != texto_base:
+            texto = texto_base + ' ' + texto
+        resposta = entregar_a_vespera(j)
+        if resposta:
+            texto = resposta + ' ' + texto
     j.dialogo = (nome, texto)
     j.memorizar(nome, texto)
     j.eventos.append("pagina")

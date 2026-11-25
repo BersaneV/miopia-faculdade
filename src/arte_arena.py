@@ -146,6 +146,7 @@ def _cenario(surf,e,cx,cy):
     for apoio in e.apoios():
         _apoio(surf, apoio.move(-int(cx),-int(cy)), e.indice)
     if e.indice == 1:
+        from .ninhada import pontos as abrigos_da_ninhada
         x = round(e.cortina-cx)
         _teia(surf,l+80,base-225,1)
         _teia(surf,r-90,base-210,-1)
@@ -153,6 +154,12 @@ def _cenario(surf,e,cx,cy):
         pygame.draw.lines(surf,PELE,False,[(e.valvula-cx,base-48),(e.valvula-cx,base-215),
                                             (x,base-216)],2)
         pygame.draw.line(surf,(82,121,119),(x-18,base-217),(x+20,base-217),4)
+        for abrigo in abrigos_da_ninhada(e):
+            px = round(abrigo-cx)
+            pygame.draw.lines(surf, PELE, False, [(px-18,base),(px,base-23),(px+14,base)], 2)
+            pygame.draw.ellipse(surf, (85, 99, 81), (px-13,base-23,26,23))
+            for n in range(3):
+                pygame.draw.aaline(surf, FIO, (px-8,base-18+n*5), (px+9,base-16+n*5))
         if e.agua>0:
             for i in range(12):
                 sx = x - 20 + i*3
@@ -182,6 +189,8 @@ def _cenario(surf,e,cx,cy):
         for pos in [(vx,base-220),(bx,base-226)]:
             pygame.draw.circle(surf,FIO,pos,5,1)
         _sino(surf,bx,by,e.relogio,e.onda if e.sino_soou or e.impacta else 0)
+        from .aula_sino import marca as marca_do_sino
+        marca_do_sino(surf,round(e.dir-cx),base-118,e.sino_soou or e.tecnica=="sino")
 
 
 def _linha_de_aviso(surf, inicio, fim):
@@ -195,18 +204,49 @@ def _linha_de_aviso(surf, inicio, fim):
     return pontos
 
 
+def _sinais_do_chamado(surf, e, cx, cy):
+    from .arte_resgates import vagalume
+    from .ultimo_chamado import MEIA_FAIXA, altura_das_penas, ninhos
+
+    for indice, (tx, ty) in enumerate(ninhos(e)):
+        x, y = round(tx-cx), round(ty-cy)
+        if indice < e.coro_sinais:
+            pygame.draw.circle(surf, TEAL, (x,y), 14, 2)
+            pygame.draw.lines(surf, FIO, False, [(x-6,y), (x-2,y+4), (x+7,y-5)], 2)
+        elif indice == e.coro_sinais:
+            pygame.draw.circle(surf, OURO, (x,y), 23, 2)
+            pygame.draw.lines(surf, OURO, False, [(x-9,y+6), (x,y-7), (x+9,y+6)], 2)
+            for n in range(e.aliados):
+                desloc = (n-(e.aliados-1)/2)*31
+                vagalume(surf,x+desloc,y-45,e.relogio+n,OURO,'tila',.5)
+        else:
+            pygame.draw.ellipse(surf, PELE, (x-11,y+16,22,6), 1)
+    base = round(e.chao-cy)
+    if e.coro_faixas:
+        for centro in e.coro_faixas:
+            x = round(centro-cx)
+            bordas = x-MEIA_FAIXA, x+MEIA_FAIXA
+            pygame.draw.line(surf, FERRUGEM, (bordas[0],base-3), (bordas[1],base-3), 3)
+            if e.estado == 'coro_aviso':
+                for borda in bordas:
+                    for y in range(base-194, base-18, 23):
+                        pygame.draw.line(surf, FERRUGEM, (borda,y), (borda,y+10), 2)
+                for y in (base-180, base-108, base-37):
+                    pygame.draw.lines(surf, OURO, False, [(x-7,y-5), (x,y+3), (x+7,y-5)], 2)
+            else:
+                y = round(altura_das_penas(e)-cy)
+                for dx, dy in ((-15,-6), (0,0), (15,-13)):
+                    pygame.draw.polygon(surf, FIO, [(x+dx-3,y+dy-26), (x+dx+5,y+dy-15),
+                                                    (x+dx,y+dy), (x+dx-6,y+dy-11)])
+                    pygame.draw.line(surf, OURO, (x+dx,y+dy-14), (x+dx,y+dy+2), 2)
+    elif e.estado == 'coro_aviso':
+        _linha_de_aviso(surf, (e.x-cx,e.alvo_y-cy), (e.destino-cx,e.alvo_y-cy))
+
+
 def _mira(surf, e, cx, cy):
     x, y = e.x-cx, e.y-cy
     if e.estado.startswith('coro_'):
-        from .ultimo_chamado import alvo
-        from .arte_resgates import vagalume
-        tx,ty=alvo(e);tx-=cx;ty-=cy
-        pygame.draw.circle(surf,OURO,(round(tx),round(ty)),23,2)
-        pygame.draw.lines(surf,OURO,False,[(tx-9,ty+6),(tx,ty-7),(tx+9,ty+6)],2)
-        for n in range(e.aliados):
-            vagalume(surf,tx+(n-1)*31,ty-45,e.relogio+n,OURO,'tila',.5)
-        if e.estado=='coro_aviso':
-            _linha_de_aviso(surf,(x,e.alvo_y-cy),(e.destino-cx,e.alvo_y-cy))
+        _sinais_do_chamado(surf, e, cx, cy)
         return
     if e.indice == 2 and e.estado == 'aviso' and e.tecnica == 'salto':
         from .casco import ponto_salto
@@ -262,6 +302,8 @@ def desenhar_encontro(surf,e,cx,cy=0):
     if e.inicio + e.largura < cx-120 or e.inicio > cx+surf.get_width()+120:
         return
     _cenario(surf,e,cx,cy)
+    if e.indice == 3 and e.vencido:
+        return  # A Coruja acalmada já aparece junto à raiz de fora.
     x,y = round(e.x-cx),round(e.y-cy)
     if e.indice == 1 and not e.vencido:
         pygame.draw.line(surf,TEAL,(x,round(e.chao-cy-260)),(x,y),1)
@@ -275,7 +317,7 @@ def desenhar_encontro(surf,e,cx,cy=0):
     if e.indice==0 and e.estado=="aviso" and e.asa_rasteira:
         pose = 2  # abre as asas horizontalmente já na preparação do rasante
     if e.estado=='coro_aviso':pose=1
-    if e.estado=='coro_investida':pose=2
+    if e.estado in ('coro_investida', 'coro_queda'):pose=2
     imagem = _corpo(e.indice,pose,int(e.relogio*(5 if pose==0 else 8))%4,e.frente)
     caixa = imagem.get_rect(center=(x,y))
     caixa.bottom = min(caixa.bottom, round(e.chao-cy+2))
@@ -292,6 +334,13 @@ def desenhar_encontro(surf,e,cx,cy=0):
 
 def sinais_encontro(surf,e,cx,cy=0):
     """Fios e marcas de ataque continuam visíveis além do alcance pessoal."""
+    if e.ninhada is not None and e.ninhada.cascas:
+        for origem in e.ninhada.cascas:
+            x, y = round(origem-cx), round(e.chao-cy)
+            pygame.draw.ellipse(surf, OURO, (x-26,y-12,52,12), 2)
+            for f in (-1,1):
+                pygame.draw.lines(surf, FIO, False, [(x+f*4,y-14),(x+f*14,y-29),(x+f*20,y-25)], 2)
+            pygame.draw.lines(surf, FERRUGEM, False, [(x-6,y-32),(x,y-39),(x+6,y-32)], 2)
     for f in e.fios:
         x,y = f.x-cx, f.y-cy
         pygame.draw.line(surf,TEAL,(x-f.vx*.07,y-f.vy*.07),(x,y),2)

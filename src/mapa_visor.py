@@ -65,8 +65,9 @@ class Visor:
 
     def desenhar(self,s,j):
         from .cartografia import mapa_local,alvo_local
+        from .ilustracao import alto_contraste, tamanho_texto
         r=self.janela(j);alvo=alvo_local(j)
-        assinatura=(regiao(j),dimensoes(j),tuple(r),frozenset(j.explorado),frozenset(j.cartografia),
+        assinatura=(regiao(j),dimensoes(j),tamanho_texto(14),alto_contraste(),tuple(r),frozenset(j.explorado),frozenset(j.cartografia),frozenset(j.pisadas_escuta),
                     tuple((g['regiao'],g['x'],g['y']) for g in j.globos),frozenset(j.tochas),frozenset(j.nucleos),
                     frozenset(j.flags),j.missao,j.concluida,tuple(sorted(j.bolsa.estoque.items())),
                     tuple((k,v['oficio']) for k,v in sorted(j.sobreviventes.items())),

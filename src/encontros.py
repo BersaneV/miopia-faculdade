@@ -66,20 +66,28 @@ def interagir(j,o):
 
 
 def coordenar(j):
-    """Papéis reais e duas entradas simultâneas, espaçadas por um aviso legível."""
+    """Atualiza os papéis e a iluminação usada para liberar ataques."""
+    from .luzes_mundo import pontos_claros, regiao
+    atual = regiao(j)
+    alvo = j.lume.rect.center
     for e in j.inimigos:
         e.grupo=None;e.papel='';e.colegas=[]
-    from .luzes_mundo import regiao
-    for c in CLAREIRAS:
-        if c.regiao!=regiao(j) or c.id=='bercario':continue
-        vivos=[e for e in j.inimigos if e.ativo and e.origem[0] in c.membros]
-        ativos=[e for e in vivos if e.estado in ('aviso','investida')]
+    grupos = [(c.id, c.membros) for c in CLAREIRAS if c.regiao == atual and c.id != "bercario"]
+    from . import galeria_taquaral
+    if galeria_taquaral.ativo(j):
+        grupos.append(("galeria_sementes", galeria_taquaral.MEMBROS))
+    for ident, membros in grupos:
+        vivos=[e for e in j.inimigos if e.ativo and e.origem[0] in membros]
+        luz = (False,) * len(vivos)
+        alvo_claro = False
+        if len(vivos) > 1 and any(math.dist(alvo, e.rect.center) < 335 for e in vivos):
+            alvo_claro, *luz = pontos_claros(j, (alvo, *(e.rect.center for e in vivos)))
         for n,e in enumerate(vivos):
-            e.grupo=c.id;e.papel=('pressao','flanco','cobertura')[n%3]
+            e.grupo=ident;e.papel=('pressao','flanco','cobertura')[n%3]
             e.colegas=vivos
-            # Um parceiro cobre a recuperação; avisos nunca começam no mesmo
-            # instante nem substituem a mira comprometida de cada ataque.
-            recente=any(o is not e and o.estado=='aviso' and o.t>o.ficha.aviso/o.ritmo*.88-.18 for o in ativos)
+            e.ataque_iluminado = alvo_claro and luz[n]
+            if ident == "galeria_sementes":
+                e.papel = "cobertura" if e.tipo == "vespa" else "flanco"
 
 
 def desenhar(s,o,j,cx):

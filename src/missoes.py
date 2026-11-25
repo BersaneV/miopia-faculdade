@@ -16,6 +16,7 @@ class Missao:
     recompensa: str
     alvo_id: str = ""
     motivo: str = ""
+    local: str = ""
 
 
 def conhecidas(j):
@@ -61,7 +62,7 @@ def conhecidas(j):
         from .raizes_bosque import passo_pedido
         estado,passo,alvo=passo_pedido(j)
         out.append(Missao('pedido_raizes','A reserva do berçário','Mimo','Mimo',0,estado,passo,
-                          'Ampola do berçário: capacidade de 3 bálsamos e uma carga.',alvo,
+                          'Ampola para três bálsamos, uma carga e a Agulha de taquara.',alvo,
                           'O âmbar do viveiro permite vedar outra ampola de viagem.'))
     if any('ouviu_resgates' in f for f in j.historico.values()) or j.sobreviventes:
         from .resgates import PESSOAS
@@ -80,6 +81,28 @@ def conhecidas(j):
                           'Concluída' if 'jardim_plantado' in j.cartografia else 'Em curso',passo,
                           'Retorno ao viveiro e dois pavios; dois segredos na rota.',ident,
                           'Água e sementes precisam chegar ao mesmo canteiro.'))
+    from . import fio_corte
+    if fio_corte.CONHECIDA in j.cartografia:
+        estado, passo, alvo = fio_corte.passo(j)
+        out.append(Missao(fio_corte.ID, fio_corte.TITULO, "Fio", "Margens da cisterna", 1,
+                          estado, passo, fio_corte.RECOMPENSA, alvo, fio_corte.MOTIVO,
+                          local="Corte da Figueira"))
+    from . import galeria_taquaral as galeria
+    flags_taquaral = j.historico.get((j.volta, 2), set())
+    if galeria.CONHECIDA in flags_taquaral:
+        estado, passo, alvo = galeria.passo_pedido(flags_taquaral)
+        out.append(Missao(galeria.PEDIDO, galeria.NOME_PEDIDO, "Risca", "Veneziana", 2,
+                          estado, passo, galeria.PREMIO, alvo, galeria.MOTIVO, local=galeria.TITULO))
+    from . import resgates, rotas_borda
+    for ident, trabalho in rotas_borda.POSTOS.items():
+        finalizado = trabalho.corda.id in j.historico.get((j.volta, trabalho.etapa), ())
+        if finalizado or rotas_borda.posto(j, ident) is not None:
+            nome = resgates.POR_ID[ident].nome
+            posto = rotas_borda.PREFIXO + ident
+            out.append(Missao(posto, trabalho.titulo, nome, FASES[trabalho.etapa].name, trabalho.etapa,
+                              "Concluída" if finalizado else "Em curso",
+                              trabalho.registro if finalizado else trabalho.pista,
+                              trabalho.corda.nome + ".", "" if finalizado else posto))
     return tuple(out)
 
 

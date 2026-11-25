@@ -41,14 +41,24 @@ def fontes(j):
 
 def zonas(j):
     from .encontros import CLAREIRAS
-    return [pygame.Rect(c.area) for c in CLAREIRAS if c.regiao==regiao(j) and c.id in j.tochas]
+    from . import galeria_taquaral
+    atual = regiao(j)
+    return ([pygame.Rect(c.area) for c in CLAREIRAS if c.regiao == atual and c.id in j.tochas]
+            + list(galeria_taquaral.zonas(j)))
 
 
-def claro(j,ponto):
+def pontos_claros(j, pontos):
     from .resgates import fontes as resgatados
-    return (any(z.collidepoint(ponto) for z in zonas(j)) or
-            any(math.dist(ponto,(x,y))<r*.65 for x,y,r in fontes(j)+resgatados(j)) or
-            any(math.dist(ponto,(v.x,v.y))<v.raio(j.tempo)*.65 for v in j.vestigios))
+    areas = zonas(j)
+    focos = fontes(j) + resgatados(j)
+    focos.extend((v.x, v.y, v.raio(j.tempo)) for v in j.vestigios)
+    return tuple(any(z.collidepoint(ponto) for z in areas)
+                 or any(math.dist(ponto, (x, y)) < r*.65 for x, y, r in focos)
+                 for ponto in pontos)
+
+
+def claro(j, ponto):
+    return pontos_claros(j, (ponto,))[0]
 
 
 def desenhar(s,j,cx):

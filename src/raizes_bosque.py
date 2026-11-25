@@ -174,9 +174,11 @@ def fala_mimo(j):
         j.flags.update(('pedido_raizes','pedido_raizes_entregue'))
         j.bolsa.receber('frasco',1);j.bolsa.receber('balsamo',1)
         j.memorizar('A reserva do berçário · entregue',
-                    'Mimo recebeu o âmbar guardado pelo Caruncho. Ampliou a bolsa para três bálsamos e entregou uma carga. Recibo único.')
+                    'Mimo recebeu o âmbar do Caruncho. A bolsa comporta três bálsamos e recebeu uma carga. V alterna o Espinho e a Agulha de taquara.')
         j.eventos.append('coleta')
-        return 'Esse âmbar vedava os alvéolos do berçário. Com ele fiz outra ampola: agora cabem três bálsamos na bolsa. Deixei uma carga nela. O cipó que você soltou também servirá aos mensageiros.'
+        return ('Com esse âmbar vedei outra ampola. Cabem três bálsamos na bolsa, e deixei uma carga. '
+                'Leve também a Agulha de taquara. Ela alcança mais longe, mas demora a voltar à guarda. '
+                'Use V para alternar entre a agulha e o espinho.')
     if ('pedido_raizes' in j.flags and 'pedido_raizes_entregue' not in j.flags
             and 'encomenda_entregue' in j.flags):
         return 'Falta o âmbar no viveiro sob o Bosque. Meus riscos estão junto à grade antes do marco do ramal. O pino no galho alto da galeria abre a porta no fundo do poço. O cipó permite voltar mesmo se o Caruncho resistir.'
@@ -185,7 +187,7 @@ def fala_mimo(j):
 
 def passo_pedido(j):
     flags=j.historico.get((j.volta,0),set())
-    if 'pedido_raizes_entregue' in flags:return 'Concluída','A bolsa ampliada comporta três bálsamos.',''
+    if 'pedido_raizes_entregue' in flags:return 'Concluída','A bolsa comporta três bálsamos. V alterna as armas.',''
     if 'ambar_ninho' in flags:return 'Entregar','Leve o âmbar do berçário a Mimo, no abrigo do Bosque.','npc:Mimo'
     if 'caruncho_vencido' in flags:return 'Em curso','Recolha o âmbar atrás do viveiro e solte o nó do cipó.','ambar_ninho'
     if 'porta_ninho' in flags:return 'Em curso','Afaste o Caruncho do Viveiro, atrás da raiz erguida.','caruncho_alvo'

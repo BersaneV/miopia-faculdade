@@ -4,13 +4,15 @@ from itertools import chain
 
 import pygame
 
-from .ilustracao import AMBAR, OSSO, PALIDO, TEAL, fonte, losango, painel, texto
+from . import aula_sino
+from .ilustracao import AMBAR, OSSO, PALIDO, TEAL, fonte, losango, painel, tamanho_texto, texto
 
 
 def texto_curto(msg, largura, tamanho=14, estilo="normal"):
-    if fonte(tamanho,estilo).size(msg)[0]<=largura:
+    medida = fonte(tamanho_texto(tamanho),estilo)
+    if medida.size(msg)[0]<=largura:
         return msg
-    while msg and fonte(tamanho,estilo).size(msg+"…")[0]>largura:
+    while msg and medida.size(msg+"…")[0]>largura:
         msg=msg[:-1]
     return msg.rstrip()+"…"
 
@@ -64,7 +66,7 @@ def mapa_local(s,j,rect,compacto=False,*,janela_mundo=None):
                     round(r.y+(j.camera_y-mundo.y)*sy),round(960*sx),round(540*sy))
     if not getattr(j,'_mapa_sem_lume',False):pygame.draw.rect(s,(64,81,77),cam,1)
     for o in j.objetos:
-        if o.tipo not in ("refugio","marco","fenda","passagem","valvula","saida","voltar",'lanterna'):
+        if o.tipo not in ("refugio","marco","fenda","passagem","valvula","saida","voltar","corda_borda",'lanterna') and not o.id.startswith("borda_"):
             continue
         if not mundo.collidepoint(o.x,o.y-8):
             continue
@@ -97,6 +99,17 @@ def mapa_local(s,j,rect,compacto=False,*,janela_mundo=None):
                 x2,y2=ponto((gx+1)*TAMANHO,gy*TAMANHO)
                 pygame.draw.rect(s,(12,22,24),(x,y,x2-x+1,y2-y+1))
             inicio=gy+1
+    if aula_sino.ativa(j):
+        for volta, coluna, y in j.pisadas_escuta:
+            x = coluna*TAMANHO + TAMANHO//2
+            if volta == j.volta and mundo.collidepoint(x,y):
+                px,py = ponto(x,y)
+                meia = max(1, round(TAMANHO*sx*.36))
+                pygame.draw.line(s,aula_sino.COR_PISADA,(px-meia,py-2),(px+meia,py-2),2)
+        x,y = aula_sino.SAIDA
+        if mundo.collidepoint(x,y-34) and conhecida(j,x,y-34):
+            px,py = ponto(x,y-34)
+            pygame.draw.lines(s,TEAL,False,[(px-4,py+2),(px,py-2),(px+4,py+2)],1)
     if alvo and mundo.collidepoint(alvo.x,alvo.y-20) and conhecida(j,alvo.x,alvo.y-20):
         px,py=ponto(alvo.x,alvo.y-20)
         px=max(r.left+6,min(r.right-7,px))
@@ -106,7 +119,7 @@ def mapa_local(s,j,rect,compacto=False,*,janela_mundo=None):
         pygame.draw.line(s,(162,230,198),(px,py-6),(px,py+6),1)
         if not compacto:
             label=texto_curto(alvo.nome,min(200,r.w-14),14,"forte")
-            largura=fonte(14,"forte").size(label)[0]
+            largura=fonte(tamanho_texto(14),"forte").size(label)[0]
             tx=max(r.left+4,min(r.right-largura-4,px+12))
             ty=max(r.top+2,min(r.bottom-19,py-24))
             painel(s,(tx-3,ty-1,largura+6,21),False)
