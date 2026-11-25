@@ -229,6 +229,7 @@ def diario(a,s):
         from .missoes import rastreada
         texto(s,texto_curto("Acompanhando: "+rastreada(j).titulo+" · Direita: lista de pedidos",780,11),85,183,11,AMBAR)
         mapa_local(s,j,(85,197,780,153))
+        texto(s,f'Bálsamos: {j.bolsa.estoque["balsamo"]}/{j.bolsa.capacidade_balsamo} na bolsa · {j.bolsa.reserva_balsamo} no abrigo',864,352,10,PALIDO,'normal','right')
         alvo=alvo_local(j)
         texto(s,texto_curto(j.objetivo,780,17,"forte"),85,362,17,OSSO,"forte")
         if alvo:
@@ -242,6 +243,7 @@ def diario(a,s):
             if j.bolsa.bonus_dano>1: bonus.append(f"dano +{round((j.bolsa.bonus_dano-1)*100)}%")
             if j.bolsa.bonus_velocidade>1: bonus.append(f"movimento +{round((j.bolsa.bonus_velocidade-1)*100)}%")
             if j.bolsa.fator_dreno<1: bonus.append(f"gasto de luz −{round((1-j.bolsa.fator_dreno)*100)}%")
+            if j.bolsa.estoque['frasco']:bonus.append('3 bálsamos na bolsa')
             texto(s,texto_curto("Relíquias ativas · "+" · ".join(bonus),780,12),85,442,12,AMBAR)
         else:
             texto(s,"Explore para localizar o alvo. K recupera a nitidez da floresta.",85,442,12,TEAL)

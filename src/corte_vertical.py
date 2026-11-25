@@ -249,8 +249,7 @@ def interagir(j,o):
     if ident in ("marco_poco","marco_estaleiro"):
         j.marco_vertical=ident.removeprefix("marco_")
         j.checkpoint=MARCOS[j.marco_vertical]
-        j.lume.energia=100.
-        j.notificar("Marco aceso. O retorno fica neste patamar.")
+        j.notificar("Retorno guardado neste patamar. O marco não repõe luz.")
         j.eventos.append("raiz")
         return
     if ident=="comporta_viveiro" and "viveiro_aberto" not in j.cartografia:
@@ -278,8 +277,6 @@ def interagir(j,o):
     if ident=="placa_arquivo" and "leu_placa_arquivo" not in j.cartografia:
         j.bolsa.receber("balsamo",1)
         j.eventos.append("coleta")
-    if ident in ("ralo_cisterna","selo_copa"):
-        j.lume.energia=100.
     if ident in REGISTROS:
         j.dialogo=REGISTROS[ident]
         j.memorizar(*j.dialogo)

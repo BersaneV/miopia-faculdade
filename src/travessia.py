@@ -12,7 +12,7 @@ from .fases import (ARENA, CHAO, FIM_ARENA, FALAS, FASES, MEIO, RAIZ, SAIDA,
                     RAMAIS, Objeto, Terreno, montar_infinito, terrenos)
 
 
-from . import narrativa, corte_vertical, subsolo
+from . import narrativa, corte_vertical, subsolo, raizes_bosque, recursos
 
 
 @dataclass(frozen=True)
@@ -50,6 +50,7 @@ class Lume:
         self.energia = 100.
         self.vidas = vidas
         self.em_corda = False
+        self.corda_destino = None
         self.bateu = False
         self.na_parede = self.planando = self.impulso_parede = False
         self.ultimo_impulso = self.lado_parede = 0
@@ -283,6 +284,7 @@ class Jornada:
         self.inimigos = [Habitante(*e, dificuldade=self.dificuldade) for e in inimigos if "inimigo_" + str(e[1]) not in self.flags]
         if subsolo.ativo(self) and "inimigo_2860" not in self.flags:
             self.inimigos.append(Habitante("aranha",2860,1102,dificuldade=self.dificuldade))
+        if raizes_bosque.ativo(self):raizes_bosque.povoar(self)
         for e in self.inimigos:
             e.guarda = self.tranca_fechada and e.origem[0] == VIGIA_X and e.tipo == "carabideo"
         # No Bosque, a primeira silhueta a aparecer precisa ser a de Lume.
@@ -304,6 +306,7 @@ class Jornada:
             "corte": {"ativo": self.em_vertical, "marco": self.marco_vertical,
                       "memoria": sorted(self.cartografia)}, "modo": self.modo, "dificuldade": self.dificuldade,
             "etapa": self.etapa, "volta": self.volta, "vidas": self.lume.vidas,
+            'energia': max(0.,self.lume.energia), 'retorno_pendente':self.estado in ('caido','derrota'),
             "tempo": self.tempo, "tempo_restante": self.tempo_restante,
             "pontuacao": self.pontuacao, "diario": list(self.diario),
             "bolsa": self.bolsa.salvar(self.tempo),
@@ -326,7 +329,7 @@ class Jornada:
             raise ValueError("Mapa descoberto inválido")
         jogo.explorado = set(memoria) if dados.get("mapa_grade")==24 else set()
         escolha=dados.get("missao")
-        jogo.missao = escolha if escolha in ("principal","secundaria","entrega_mimo",*(f"pedido_{i}" for i in range(4))) else "principal"
+        jogo.missao = escolha if escolha in ("principal","secundaria","entrega_mimo",'pedido_raizes',*(f"pedido_{i}" for i in range(4))) else "principal"
         for visita in dados["fases"]:
             nivel = int(visita["etapa"])
             if not 0 <= nivel < len(FASES):
@@ -360,6 +363,9 @@ class Jornada:
             if corte.get("ativo") and jogo.modo=="historia":
                 corte_vertical.entrar(jogo,marco)
         jogo.reiniciar()
+        energia=dados.get('energia',100.)
+        if not isinstance(energia,(int,float)) or not math.isfinite(energia):raise ValueError('Luz salva inválida')
+        if not dados.get('retorno_pendente',False):jogo.lume.energia=max(.01,min(100.,energia))
         return jogo
 
     @property
@@ -368,7 +374,8 @@ class Jornada:
 
     @property
     def altura_mundo(self):
-        return corte_vertical.ALTURA if self.em_vertical else (subsolo.ALTURA if subsolo.ativo(self) else 540)
+        return corte_vertical.ALTURA if self.em_vertical else (raizes_bosque.ALTURA if raizes_bosque.ativo(self)
+                else subsolo.ALTURA if subsolo.ativo(self) else 540)
 
     @property
     def orvalhos(self):
@@ -381,7 +388,13 @@ class Jornada:
             portatil += 65
         if self.boss and not self.boss.vencido:
             portatil += 22
+        elif self.minichefe is not None:portatil+=14
         return portatil
+
+    @property
+    def minichefe(self):
+        if not raizes_bosque.ativo(self) or not 1474<self.lume.rect.centerx<2080 or self.lume.rect.bottom<1054:return None
+        return next((e for e in self.inimigos if isinstance(e,raizes_bosque.Caruncho) and e.ativo),None)
 
     def visivel(self, centro, margem=0):
         from .visao import ponto_visivel
@@ -403,11 +416,12 @@ class Jornada:
     def solidos(self):
         if self.em_vertical:
             return corte_vertical.terrenos("viveiro_aberto" in self.cartografia)
-        geometria=frozenset(self.flags.intersection(("dreno","ponte","no","contrapeso",self.fase.preparo,"chefe")))
-        ident=(self.etapa,geometria,subsolo.ativo(self))
+        geometria=frozenset(self.flags.intersection(("dreno","ponte","no","contrapeso",self.fase.preparo,"chefe",'porta_ninho','cipo_estendido')))
+        ident=(self.etapa,geometria,subsolo.ativo(self),raizes_bosque.ativo(self))
         if getattr(self,"_geometria_id",None)!=ident:
             base=terrenos(self.etapa,geometria)
             self._geometria_base=tuple(subsolo.terrenos(base) if subsolo.ativo(self) else base)
+            if raizes_bosque.ativo(self):self._geometria_base=tuple(raizes_bosque.terrenos(base,geometria))
             self._geometria_id=ident
         out=list(self._geometria_base)
         if self.tranca_fechada:
@@ -436,12 +450,13 @@ class Jornada:
                    enumerate(self.gotas) if f"gota_{n}" not in self.flags)
         if self.gota_minuto and "gota_minuto" not in self.flags:
             out.append(Objeto("gota_minuto", "orvalho", *self.gota_minuto, "Orvalho da madrugada"))
+        tipo_marco='marco' if recursos.limitado(self) else 'refugio'
         out.extend((
             Objeto("abrigo", "refugio", 114 if self.etapa == 0 else 82, CHAO, "Descansar sob a casca"),
             Objeto("abrigo_npc", "npc", 163, CHAO, ("Mimo", "Brasa", "Candeia", "Brasa")[self.etapa]),
             Objeto("atalho", "atalho", 1756, CHAO, "Abrir atalho ao abrigo" if "atalho" not in self.flags else "Voltar ao abrigo"),
-            Objeto("meio", "refugio", MEIO, CHAO, "Descansar no marco do ramal"),
-            Objeto("marco", "refugio", ARENA-24, CHAO, "Descansar no marco da arena"),
+            Objeto("meio", tipo_marco, MEIO, CHAO, "Guardar retorno no ramal"),
+            Objeto("marco", tipo_marco, ARENA-24, CHAO, "Guardar retorno antes da arena"),
             Objeto("raiz", "raiz", RAIZ, CHAO, "Devolver orvalho" if "raiz" not in self.flags else "Ouvir a raiz"),
             Objeto("saida", "saida", SAIDA, CHAO, "Seguir a raiz"),
         ))
@@ -454,6 +469,7 @@ class Jornada:
         out.extend(corte_vertical.entradas(self))
         if subsolo.ativo(self):
             out.extend(subsolo.objetos(self))
+        if raizes_bosque.ativo(self):out.extend(raizes_bosque.objetos(self))
         return out
 
     def proximo(self):
@@ -489,6 +505,10 @@ class Jornada:
         o = self.proximo()
         if not o:
             return ""
+        if o.tipo=='refugio' and recursos.limitado(self):
+            if 'descanso_'+o.id in self.flags:
+                return f'Retirar bálsamos da reserva ({self.bolsa.reserva_balsamo})' if self.bolsa.reserva_balsamo else 'Abrigo sem provisões'
+            return 'Usar reserva do abrigo (uma vez)'
         if o.tipo == "npc":
             return "Ouvir " + o.nome
         if o.tipo == "valvula":
@@ -519,6 +539,8 @@ class Jornada:
     def dica_local(self):
         if self.em_vertical:
             return "Tab  mapa do corte   ·   S + Espaço  descer por uma grade"
+        if raizes_bosque.setor(self):
+            return 'S + Espaço desce pelos galhos. E no cipó do poço permite voltar mesmo sem vencer o Caruncho.'
         x = self.lume.rect.centerx
         if subsolo.ativo(self) and 2480 < x < 3200:
             return "Raízes inferiores · S + Espaço desce. Salte pelos galhos para voltar."
@@ -551,6 +573,7 @@ class Jornada:
         self.lume.golpe = self.lume.pulso = self.lume.impacto = 0.
         self.lume.chao = True
         self.lume.em_corda = self.lume.na_parede = self.lume.planando = False
+        self.lume.corda_destino = None
         self.lume.trava_lateral = self.lume.graca_parede = 0.
         self.lume.ultimo_impulso = self.lume.lado_parede = 0
         self.lume.ignorar_topo = None
@@ -621,6 +644,7 @@ class Jornada:
             corte_vertical.camera(self)
         elif subsolo.ativo(self):
             subsolo.camera(self)
+        elif raizes_bosque.ativo(self):raizes_bosque.camera(self)
         self.notificar("Lume reencontra a luz do marco.")
         self.eventos.append("retorno")
 
@@ -653,6 +677,7 @@ class Jornada:
             corte_vertical.camera(self)
         elif subsolo.ativo(self):
             subsolo.camera(self)
+        elif raizes_bosque.ativo(self):raizes_bosque.camera(self)
 
     def perder_fagulha(self, motivo="energia"):
         if self.estado != "jogando":
@@ -664,6 +689,9 @@ class Jornada:
         self.eventos.append("morte")
 
     def interagir(self, o):
+        if o.tipo=='raizes':
+            raizes_bosque.interagir(self,o)
+            return
         if o.tipo == "reliquia":
             item = o.id.removeprefix("reliquia_")
             if not self.bolsa.estoque.get(item):
@@ -734,9 +762,13 @@ class Jornada:
                 l.vx = l.vy = 0.
                 self.eventos.append("corda")
         elif o.tipo == "refugio":
-            l.energia = 100.
-            self.eventos.append("coleta")
-            self.notificar("Luz restaurada. " + self.objetivo, 7.)
+            recursos.descansar(self,o)
+        elif o.tipo=='marco':
+            if o.id=='marco' and self.fase.preparo not in self.flags:
+                self.notificar('Abra a passagem principal antes de guardar este retorno.');return
+            self.flags.add(o.id)
+            self.checkpoint=(MEIO if o.id=='meio' else ARENA-20,CHAO)
+            self.notificar('Retorno guardado. Este marco não cura; guarde os bálsamos para o perigo.',6.)
         elif o.tipo == "atalho":
             self.flags.add("atalho")
             self.recolocar((1728 if o.id == "via" else 320, CHAO))
@@ -834,10 +866,11 @@ class Jornada:
             return
         estava_chao = l.chao
         if l.em_corda:
-            alvo = 240 if self.etapa == 0 else 242
+            alvo = l.corda_destino if l.corda_destino is not None else 240 if self.etapa == 0 else 242
             l.rect.bottom = max(alvo, l.rect.bottom - 265 * dt)
             if l.rect.bottom <= alvo:
                 l.em_corda = False
+                l.corda_destino = None
                 l.chao = True
             else:
                 l.chao = False
@@ -852,7 +885,8 @@ class Jornada:
         pouso = not estava_chao and l.chao
         if pouso: self.eventos.append("pouso")
         if cmd.deslize and l.slide >= .60: self.eventos.append("deslize")
-        if l.rect.top > subsolo.limite_queda(self):
+        limite=raizes_bosque.limite_queda(self) if raizes_bosque.ativo(self) else subsolo.limite_queda(self)
+        if l.rect.top > limite:
             self.recuperar_queda()
             return
         for o in self.objetos:
@@ -867,17 +901,17 @@ class Jornada:
         if self.tranca_fechada and l.rect.centerx > MEIO+20 and "viu_vigia" not in self.flags:
             self.flags.add("viu_vigia")
             self.notificar("O vigia aperta a trança. Ataque pelas costas ou quebre a guarda com o terceiro corte.", 5.)
-        if l.rect.centerx >= MEIO-36 and "meio" not in self.flags:
+        if l.rect.centerx >= MEIO-36 and l.rect.bottom<=CHAO+24 and "meio" not in self.flags:
             self.flags.add("meio")
             self.checkpoint = (MEIO, CHAO)
-            l.energia = 100.
-            self.notificar("Marco do ramal aceso · " + RAMAIS[self.etapa].nome)
+            recursos.iluminar_marco(self)
+            self.notificar("Retorno no ramal · sem cura automática · " + RAMAIS[self.etapa].nome)
             self.eventos.append("coleta")
         if l.rect.centerx >= ARENA-52 and self.fase.preparo in self.flags and "marco" not in self.flags:
             self.flags.add("marco")
             self.checkpoint = (ARENA-20, CHAO)
-            l.energia = 100.
-            self.notificar("Marco aceso. O musgo guardará sua volta.")
+            recursos.iluminar_marco(self)
+            self.notificar("Retorno antes da arena. O marco guarda a volta; não repõe luz.")
             self.eventos.append("coleta")
         if l.rect.left >= ARENA + 5 and self.fase.preparo in self.flags and "chefe" not in self.flags and self.boss is None:
             from .chefes import Encontro
@@ -911,6 +945,7 @@ class Jornada:
         self.camera += (alvo - self.camera) * (1. - math.exp(-7.5 * dt))
         if subsolo.ativo(self):
             subsolo.camera(self, dt)
+        if raizes_bosque.ativo(self):raizes_bosque.atualizar(self,dt)
 
     def combater_inimigos(self, dt, golpe, clarao):
         lume = self.lume

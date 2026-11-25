@@ -208,6 +208,20 @@ def terreno(s,t,camera,i):
     if t.tipo=="tranca":
         tranca(s,r)
         return
+    if t.tipo=='raiz_lisa':
+        pygame.draw.rect(s,(52,62,40),r)
+        for n in range(3):
+            x=r.left+4+n*max(3,(r.w-8)//3)
+            pts=[(x+math.sin(y*.018+n)*3,y) for y in range(r.top,r.bottom+1,13)]
+            pygame.draw.lines(s,(111,116,74),False,pts,2)
+        return
+    if t.tipo=='ninho_tranca':
+        pygame.draw.rect(s,(60,64,40),r)
+        for y in range(r.top+3,r.bottom,16):
+            pygame.draw.line(s,(143,127,78),(r.left,y),(r.right,y+6),3)
+            pygame.draw.line(s,(90,107,61),(r.left,y+8),(r.right,y-1),2)
+        pygame.draw.rect(s,(162,151,96),r,1)
+        return
     if t.tipo in ("vedacao","parede"):
         s.blit(rocha_lateral(r.w,r.h,t.tipo,t.rect.x),(r.x-4,r.y))
         return
@@ -341,6 +355,17 @@ def icone_item(s,item,x,y,w=24,h=24):
 def objeto(s,o,j,cx,tempo):
     x=o.x-cx
     if not -105<x<1065: return
+    if o.tipo=='raizes':
+        from .arte_raizes import objeto as desenhar_raiz
+        desenhar_raiz(s,o,j,cx,tempo)
+        return
+    if o.tipo=='marco':
+        y=o.y
+        pygame.draw.line(s,(102,117,75),(x,y),(x,y-50),5)
+        pygame.draw.ellipse(s,(90,110,67),(x-13,y-59,26,22))
+        pygame.draw.line(s,AMBAR,(x-7,y-48),(x+6,y-48),2)
+        brilho(s,(x,y-49),15)
+        return
     if o.tipo=="encomenda":
         y=o.y
         pygame.draw.polygon(s,(94,119,67),[(x-16,y-2),(x-18,y-21),(x,y-29),(x+18,y-21),(x+14,y-2)])
@@ -533,6 +558,10 @@ class Paisagem:
                 y=nivel+n*10
                 pygame.draw.lines(s,(108,154,145),False,[(left+k,y+math.sin(k*.07+t*2)*2) for k in range(0,right-left+1,10)],1)
         fundo_visao=capturar_fundo(s,cy)
+        from . import raizes_bosque
+        if raizes_bosque.ativo(j):
+            from .arte_raizes import detalhes
+            detalhes(s,j,cx)
         if i==1 and not hasattr(j,"sala_id"):
             # O sulco liga a peça desenhada no aviso à boca real do túnel.
             for n in range(18):
@@ -593,10 +622,12 @@ def hud(s,j):
     elif j.modo=="historia": local="TRAVESSIA   "+ROMANOS[j.etapa]
     else: local=f"INFINITO   {j.volta*4+j.etapa+1}   ·   {max(0,int(j.tempo_restante))} s"
     texto(s,local,925,24,12,AMBAR,"forte","right")
-    texto(s,j.setor_vertical if j.em_vertical else j.fase.name,925,44,20,OSSO,"titulo","right")
+    from .raizes_bosque import setor
+    texto(s,j.setor_vertical if j.em_vertical else setor(j) or j.fase.name,925,44,20,OSSO,"titulo","right")
     if not duelo:
         item=j.bolsa.item
         qtd="ferramenta" if item.permanente and j.bolsa.quantidade else str(j.bolsa.quantidade)
+        if item.id=='balsamo':qtd=f'{j.bolsa.quantidade}/{j.bolsa.capacidade_balsamo}'
         painel(s,(19,86,213,32),False)
         icone_item(s,item.id,38,115,24,24)
         texto(s,f"{item.nome}  ·  {qtd}",57,88,13,PALIDO,"forte")

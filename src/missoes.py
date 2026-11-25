@@ -56,6 +56,12 @@ def conhecidas(j):
             "3 × Tanino de casca: cortes atravessam carapaças por 18 s.",
             "npc:Mimo" if pronta else "encomenda_mimo",
             "Mimo precisa da mochila para preparar proteção para os casulos."))
+    if 'pedido_raizes' in flags:
+        from .raizes_bosque import passo_pedido
+        estado,passo,alvo=passo_pedido(j)
+        out.append(Missao('pedido_raizes','A reserva do berçário','Mimo','Mimo',0,estado,passo,
+                          'Ampola do berçário: capacidade de 3 bálsamos e uma carga.',alvo,
+                          'O âmbar do viveiro permite vedar outra ampola de viagem.'))
     return tuple(out)
 
 

@@ -45,6 +45,10 @@ ENSAIOS = (
            'Garras, rasantes e penas têm avisos próprios. E duas vezes na roda chama a Coruja à raiz direita. Suba nos apoios e use K perto da face exposta.'),
     Ensaio('Oficina dos Espinhos',0,(160,CHAO),(),
            'V alterna espinho rápido e agulha longa, que custa 2 de luz por corte. Compare em dois alvos imóveis. E no abrigo restaura luz e alvos. Protótipo isolado.'),
+    Ensaio('Raízes do Bosque',0,(1538,CHAO),('pedido_raizes','inimigo_1548','inimigo_1660','inimigo_1978'),
+           'Leia a marca com E. S + Espaço na grade à direita desce por três salas no mesmo mapa. O pino da galeria abre o viveiro; o cipó do poço sempre permite voltar.'),
+    Ensaio('Caruncho do Viveiro',0,(2230,1282),('pedido_raizes','pino_ninho','porta_ninho'),
+           'Siga à esquerda. Carapaça frontal: terceiro corte, ataque por cima ou pelas costas. Pule as ondas e leia o segundo golpe. Recolha o âmbar e solte o nó ao fundo após vencer.'),
     Ensaio("Duelo da aranha",0,ABRIGO,(),
            "Referência S02 de fio e salto, com replay. Os vinte combos novos estão em Patrulha em dupla e na História. E recupera luz no abrigo."),
 )
@@ -69,6 +73,9 @@ def preparar_ensaio(indice, dificuldade, semente=SEMENTE_ARANHA):
         jogo.ensaio_tatico=True
         jogo.bolsa.receber("polen",2)
         jogo.bolsa.receber("tanino",2)
+    if cena.nome in ('Raízes do Bosque','Caruncho do Viveiro'):
+        jogo.missao='pedido_raizes'
+        jogo.bolsa.receber('balsamo',1)
     jogo.lume.iframes=0.
     jogo.notificar(cena.pista,8)
     return jogo

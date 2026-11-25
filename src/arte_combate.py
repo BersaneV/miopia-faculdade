@@ -58,6 +58,7 @@ def corpo(s,e,cx,t):
     pose = int(e.estado in ("aviso", "investida", "atordoado") or
                (e.tipo in ("morcego", "vespa") and int(t*6)%2==1))
     w,h = MEDIDAS[e.tipo]
+    if hasattr(e,'nome'):w,h=88,58
     if e.estado == "aviso":
         w += 4
         h -= 4
@@ -93,11 +94,20 @@ def corpo(s,e,cx,t):
     if getattr(e,"lentidao",0)>0:
         for n in range(5):
             pygame.draw.circle(s,AMBAR,(round(x+math.sin(t*2+n*1.7)*28),round(y-h/2+math.cos(t*2+n)*19)),2)
+    if hasattr(e,'nome'):
+        from .ilustracao import texto
+        texto(s,e.nome+(' · II' if getattr(e,'fase',1)==2 else ''),x,y-h-43,13,AMBAR,'forte','centerx')
+        pygame.draw.line(s,(78,79,52),(x-48,y-h-21),(x+48,y-h-21),4)
+        pygame.draw.line(s,AMBAR,(x-48,y-h-21),(x-48+96*max(0,e.vida/e.max_vida),y-h-21),3)
+        if getattr(e,'fase',1)==2:
+            for n in range(3):
+                px=x-14+n*11
+                pygame.draw.lines(s,AMBAR,False,[(px-3,y-36),(px+2,y-30),(px-2,y-24)],2)
     if e.guarda:
         losango(s,x,y-h-17,5,PERIGO,False)
         pygame.draw.line(s,AMBAR,(x-8,y-h-17),(x-4,y-h-17),1)
         pygame.draw.line(s,AMBAR,(x+4,y-h-17),(x+8,y-h-17),1)
-    if 0<e.vida<e.max_vida:
+    if 0<e.vida<e.max_vida and not hasattr(e,'nome'):
         for n in range(e.max_vida):
             losango(s, x+7*n-(e.max_vida-1)*3.5,y-h-6,2,AMBAR if n<e.vida else (92,96,96))
 

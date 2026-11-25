@@ -65,14 +65,14 @@ def mapa_local(s,j,rect,compacto=False):
                     round(r.y+(j.camera_y-mundo.y)*sy),round(960*sx),round(540*sy))
     pygame.draw.rect(s,(64,81,77),cam,1)
     for o in j.objetos:
-        if o.tipo not in ("refugio","fenda","passagem","valvula","saida","voltar"):
+        if o.tipo not in ("refugio","marco","fenda","passagem","valvula","saida","voltar"):
             continue
         if not mundo.collidepoint(o.x,o.y-8):
             continue
         if j.em_vertical and "viu_"+setor(o.y,o.x)[0] not in j.cartografia:
             continue
         px,py=ponto(o.x,o.y-12)
-        if o.tipo=="refugio":
+        if o.tipo in ('refugio','marco'):
             pygame.draw.circle(s,PALIDO,(px,py),2 if compacto else 4,1)
         elif o.tipo=="valvula":
             pygame.draw.circle(s,(94,143,139),(px,py),1 if compacto else 3)
@@ -102,6 +102,11 @@ def mapa_local(s,j,rect,compacto=False):
             ty=max(r.top+2,min(r.bottom-19,py-24))
             painel(s,(tx-3,ty-1,largura+6,21),False)
             texto(s,label,tx,ty,14,OSSO,"forte")
+    if not compacto:
+        from .raizes_bosque import ativo
+        if ativo(j):
+            from .arte_raizes import nomes_mapa
+            nomes_mapa(s,j,r,ponto,conhecida)
     px,py=ponto(*j.lume.rect.center)
     losango(s,px,py,4 if compacto else 6,AMBAR)
     s.set_clip(clip)

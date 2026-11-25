@@ -37,7 +37,7 @@ class App:
         self.mem=Memoria(temporaria)
         self.audio=Audio()
         self.ajustar_som()
-        self.credito_audio=("Vento, água, taquaras e ecos sintetizados para Miopia. As cinco criaturas têm avisos próprios, posicionados em estéreo conforme a distância e o lado de Lume.")
+        self.credito_audio=("Vento, água, taquaras e ecos sintetizados para Miopia. Seis espécies e os guardiões têm avisos próprios, posicionados em estéreo conforme a distância e o lado de Lume.")
         self.paisagem=Paisagem()
         self.paisagem.brilho_mata=self.mem.prefs["brilho"]
         self.morte_desde=0.
@@ -195,9 +195,11 @@ class App:
     def salvar_campanha(self,forcar=True):
         j=self.jogo
         if self.ensaio is not None or not j or j.modo!="historia" or j.estado not in ("jogando","caido"): return
-        assinatura=(j.etapa,j.pontuacao,j.lume.vidas,j.checkpoint,len(j.diario),
+        if not forcar and self.relogio<self.proximo_save:return
+        self.proximo_save=self.relogio+.65
+        assinatura=(j.etapa,j.pontuacao,j.lume.vidas,round(j.lume.energia),j.checkpoint,len(j.diario),
                     tuple(sorted(j.flags)),j.bolsa.revisao,j.em_vertical,j.marco_vertical,frozenset(j.cartografia),frozenset(j.explorado),j.missao)
-        if forcar or self.relogio>=self.proximo_save and assinatura!=self.ultimo_save:
+        if forcar or assinatura!=self.ultimo_save:
             self.mem_camp=j.salvar()
             self.mem.guardar("campanha",self.mem_camp)
             self.ultimo_save=assinatura
@@ -561,7 +563,8 @@ class App:
         ativo=(self.estado=="jogo" or self.estado=="replay" and self.reproducao is not None
                and not self.replay_pausado) and j and not j.dialogo
         if ativo:
-            self.musica(f"chefe_{j.boss.indice}" if j.boss and not j.boss.vencido else CORES_AUDIO[j.etapa])
+            self.musica(f"chefe_{j.boss.indice}" if j.boss and not j.boss.vencido else
+                        'chefe_2' if j.minichefe is not None else CORES_AUDIO[j.etapa])
         self.audio.ambiente(combate=bool(ativo and j.combate),
                            energia=j.lume.energia if ativo else 100,
                            raizes=j.restauradas if j else 0,suspenso=not ativo)

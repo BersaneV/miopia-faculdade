@@ -22,6 +22,7 @@ ITENS = (
     Item("espinho", "Espinho de acácia", "Relíquia ativa ao recolher. Cortes causam 25% mais dano a criaturas comuns.", True, True),
     Item("asa", "Membrana de libélula", "Relíquia ativa ao recolher. Lume anda e plana 12% mais rápido.", True, True),
     Item("resina", "Resina de âmbar", "Relíquia ativa ao recolher. Consumo passivo de luz −35%. Clarão custa 18 em vez de 22.", True, True),
+    Item('frasco','Ampola do berçário','Mimo amplia a bolsa: capacidade de bálsamos passa de 2 para 3. Não cria cargas sozinha.',True,True),
 )
 POR_ID = {item.id: item for item in ITENS}
 
@@ -35,6 +36,7 @@ class Bolsa:
         self.escuta_ate = 0.
         self.tanino_ate = 0.
         self.revisao = 0
+        self.reserva_balsamo = 0
 
     @property
     def item(self):
@@ -60,12 +62,20 @@ class Bolsa:
     def reliquias(self):
         return tuple(i for i in ITENS if i.passivo and self.estoque[i.id])
 
+    @property
+    def capacidade_balsamo(self):
+        return 3 if self.estoque['frasco'] else 2
+
     def receber(self, item, quantidade):
         # Cada bolsa de trilha e cada presente têm um registro de coleta próprio.
         if POR_ID[item].permanente:
             self.estoque[item] = 1
         else:
             self.estoque[item] += quantidade
+            if item=='balsamo':
+                excesso=max(0,self.estoque[item]-self.capacidade_balsamo)
+                self.reserva_balsamo+=excesso
+                self.estoque[item]-=excesso
         if not self.quantidade and not POR_ID[item].passivo:
             self.equipado = item
         self.revisao += 1
@@ -164,6 +174,7 @@ class Bolsa:
     def salvar(self, tempo):
         return {
             "estoque": dict(self.estoque),
+            'reserva_balsamo':self.reserva_balsamo,
             "equipado": self.equipado,
             "escudo": self.escudo,
             "pavio_restante": max(0., self.luz_ate - tempo),
@@ -185,6 +196,11 @@ class Bolsa:
         if (isinstance(dados.get("equipado"), str) and dados["equipado"] in POR_ID
                 and not POR_ID[dados["equipado"]].passivo):
             bolsa.equipado = dados["equipado"]
+        reserva=dados.get('reserva_balsamo',0)
+        if type(reserva) is int:bolsa.reserva_balsamo=max(0,min(20000,reserva))
+        excesso=max(0,bolsa.estoque['balsamo']-bolsa.capacidade_balsamo)
+        bolsa.reserva_balsamo+=excesso
+        bolsa.estoque['balsamo']-=excesso
         bolsa.escudo = dados.get("escudo") is True
         for campo, atributo, limite in (
             ("pavio_restante", "luz_ate", 12.),
@@ -270,12 +286,19 @@ def pedido_local(j):
 
 
 def _presentes(j, itens):
+    antes=j.bolsa.reserva_balsamo
     for item, quantidade in itens:
         j.bolsa.receber(item, quantidade)
-    return ", ".join(f"{quantidade} × {POR_ID[item].nome}" for item, quantidade in itens)
+    recibo=", ".join(f"{quantidade} × {POR_ID[item].nome}" for item, quantidade in itens)
+    if j.bolsa.reserva_balsamo>antes:recibo+='; excedentes guardados no abrigo'
+    return recibo
 
 
 def ajuda_do_refugio(j, nome, texto):
+    if nome=='Mimo' and j.etapa==0:
+        from .raizes_bosque import fala_mimo
+        pedido=fala_mimo(j)
+        if pedido:return pedido
     # A marca pertence à área e não reaparece ao reentrar ou carregar o marco.
     if nome == "Mimo" and "mantimento_mimo" not in j.flags:
         j.flags.add("mantimento_mimo")
