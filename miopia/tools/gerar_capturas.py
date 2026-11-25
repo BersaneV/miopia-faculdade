@@ -19,8 +19,8 @@ Produz em capturas/:
     11_final.png       cutscene de desfecho
     12_creditos.png    créditos
     13_infinito.png    cutscene de abertura do modo infinito
-    14_infinito_jogo.png  modo infinito: bioma 9, volta 3
-    15_volta.png       cartão de checkpoint entre voltas (modo infinito)
+    14_infinito_jogo.png  modo infinito: fase gerada, com mais inimigos
+    15_infinito_banner.png  modo infinito: aviso curto de fase (sem tela no meio)
     16_chefe.png       boss fight: a Coruja na fase 4
     17_ambiental.png   mensagem ambiental + pergunta de compreensão (fim de fase)
     partida.gif        ~9 segundos de jogo
@@ -360,7 +360,8 @@ def main() -> None:
     app.jogo.iniciar("infinito")
     app.fade = 0.0
     jogo = app.jogo
-    for _ in range(8):                      # chega à volta 3
+    for _ in range(4):                      # avança até uma fase mais cheia
+        jogo.coletados = jogo.necessario
         jogo._fechar_bioma()
     jogo.banner_timer = 4.0
     for _ in range(90):
@@ -368,12 +369,15 @@ def main() -> None:
         app._desenhar()
     salvar(app.tela, "14_infinito_jogo.png")
 
-    app.mostrar_volta(jogo.numero_bioma, lambda: None)
+    # o aviso curto que emenda uma fase na outra (nada de tela cheia no meio)
+    jogo.coletados = jogo.necessario
+    jogo._fechar_bioma()
     app.fade = 0.0
-    for _ in range(40):
+    for _ in range(20):
         app._atualizar(DT)
         app._desenhar()
-    salvar(app.tela, "15_volta.png")
+    salvar(app.tela, "15_infinito_banner.png")
+    app._trocar("jogo", _Vazia(app))
 
     # ---------- 6d. créditos ----------
     app.modo_historia = False

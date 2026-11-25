@@ -1,11 +1,13 @@
 """
 jogo.py — a partida: estados, regras, luz, HUD e desenho.
 
-Fluxo de um bioma:
+Fluxo de uma fase:
   1. acordar com pouca luz no canto da mata;
   2. coletar o orvalho espalhado (a luz é o combustível e a arma);
   3. abrir a saída e chegar até ela antes do amanhecer;
-  4. quatro biomas, o último com a Coruja (chefe) caçando pelo som.
+  4. modo história: quatro fases, a última com a Coruja (chefe);
+     modo infinito: fases geradas na hora, cada uma com mais bicho e
+     sem chefe — não é a história repetida em rodízio.
 
 Regras de vida: energia zerada não mata na hora — a luz pisca e, a cada
 APAGAO_DANO_INTERVALO segundos, perde-se uma vida. Assim o jogador tem
@@ -44,6 +46,7 @@ class Jogo:
         self.numero_bioma = 1       # contagem absoluta (no infinito, 5, 6, 7…)
 
         self.bioma_index = 0
+        self.dados_fase = config.BIOMAS[0]   # descritor da fase em curso
         self.mundo: Mundo | None = None
         self.jogador: Jogador | None = None
         self.orvalhos: list[Orvalho] = []
@@ -99,6 +102,7 @@ class Jogo:
         self.pausado = False
         self.bioma_index = 0
         self.numero_bioma = 1
+        self.dados_fase = config.BIOMAS[0]
         self._indice_pausa = 0
         self._carregar_bioma(0, bonus=False)
         self.ativo = True
@@ -115,23 +119,26 @@ class Jogo:
         return self.modo == "infinito"
 
     @property
-    def volta(self) -> int:
-        """Quantas voltas completas pelos quatro biomas (só no infinito)."""
-        if not self.infinito:
-            return 0
-        return (self.numero_bioma - 1) // len(config.BIOMAS)
+    def nivel(self) -> int:
+        """Fase atual do modo infinito (1, 2, 3, …). Na história, a fase 1–4."""
+        return self.numero_bioma
 
-    def dificuldade_da_volta(self) -> int:
-        """Escalonamento por volta: no máximo +6 inimigos extras."""
-        return min(6, self.volta) if self.infinito else 0
-
-    def _carregar_bioma(self, indice: int, bonus: bool = True) -> None:
+    def _carregar_bioma(self, indice: int, bonus: bool = True,
+                        dados: dict | None = None) -> None:
+        """
+        Carrega uma fase. Na história o `indice` escolhe tudo (paleta,
+        inimigos, texto). No infinito a fase é GERADA a partir do número:
+        `indice` só decide o estilo de decoração do cenário.
+        """
         self.bioma_index = indice
         if not self.infinito:
             self.numero_bioma = indice + 1
-        dados = config.BIOMAS[indice]
+            dados = config.BIOMAS[indice]
+        else:
+            dados = dados or config.fase_infinita(self.numero_bioma)
+        self.dados_fase = dados
         semente = random.randrange(1, 10**6)
-        self.mundo = Mundo(indice, semente)
+        self.mundo = Mundo(indice, semente, dados)
 
         self.jogador = Jogador(*self.mundo.inicio)
         self.orvalhos = [Orvalho(*o["pos"], raro=o["raro"]) for o in self.mundo.orvalhos]
@@ -152,13 +159,27 @@ class Jogo:
             x, y = self.mundo._centro(celula)
             self.inimigos.append(Inimigo(random.choice(tipos), x, y))
 
-        # (b) inimigos extra das voltas do modo infinito — sempre colocados
-        for _ in range(self.dificuldade_da_volta()):
-            longe = [c for c, d in self.mundo._distancias.items() if d >= 6]
-            if not longe or not tipos:
-                break
-            x, y = self.mundo._centro(random.choice(longe))
-            self.inimigos.append(Inimigo(random.choice(tipos), x, y))
+        # (b) modo infinito: garante o número anunciado da fase. O mapa às
+        # vezes recusa posição (espaçamento), e sem esse reforço a fase 7
+        # podia sair com menos bichos que a 6 — o contrário do combinado.
+        if self.infinito:
+            alvo = min(config.LIMITE_INIMIGOS_INFINITO, dados.get("total_inimigos", 0))
+            tentativas = 0
+            while len(self.inimigos) < alvo and tentativas < 240:
+                tentativas += 1
+                if not tipos:
+                    break
+                livres = [c for c, d in self.mundo._distancias.items()
+                          if d >= 5 and c != self.mundo.celula_saida]
+                if not livres:
+                    break
+                x, y = self.mundo._centro(random.choice(livres))
+                if any(abs(i.x - x) + abs(i.y - y) < 56 for i in self.inimigos):
+                    continue
+                self.inimigos.append(Inimigo(random.choice(tipos), x, y))
+            self.inimigos = self.inimigos[:config.LIMITE_INIMIGOS_INFINITO]
+
+        self.total_inimigos = len(self.inimigos)
 
         self.chefe = next((i for i in self.inimigos if getattr(i, "chefe", False)), None)
         self.estado_chefe = "inativo"
@@ -167,8 +188,8 @@ class Jogo:
 
         self.particulas.clear()
         self.textos_flutuantes.clear()
-        # no infinito cada volta pede mais orvalho (limitado ao que existe no mapa)
-        self.necessario = min(dados["necessario"] + self.dificuldade_da_volta(),
+        # o pedido da fase nunca passa do que o mapa tem para dar
+        self.necessario = min(dados["necessario"],
                               max(1, len(self.orvalhos) - 2))
         self.coletados = 0
         self.saida_aberta = False
@@ -176,7 +197,8 @@ class Jogo:
         self._ciclos_apagao = 0
         self.sem_coleta = 0.0
         self.banner_timer = 3.0
-        self.dica_timer = 5.5
+        # no infinito a dica só aparece na primeira fase; depois vira ruído
+        self.dica_timer = 5.5 if (not self.infinito or self.numero_bioma == 1) else 0.0
         # cada bioma tem a sua trilha (o modo infinito passa por todas)
         self.audio.tocar_musica(dados.get("trilha", "jogo"))
         self.tremor = 0.0
@@ -184,8 +206,10 @@ class Jogo:
         # bônus de tempo ao entrar em um bioma novo
         if bonus:
             if self.infinito:
-                # a noite não acaba: o relógio não tem teto e cada volta dá menos tempo
-                bonus_tempo = max(20.0, config.BONUS_TEMPO_BIOMA - 2.0 * self.volta)
+                # a noite não acaba: o relógio não tem teto e cada fase dá
+                # menos fôlego que a anterior
+                bonus_tempo = max(18.0,
+                                  config.BONUS_TEMPO_BIOMA - 1.5 * (self.nivel - 1))
                 self.tempo += bonus_tempo
             else:
                 self.tempo = min(config.TEMPO_TOTAL,
@@ -196,6 +220,7 @@ class Jogo:
         self.pontos += config.PONTOS_BIOMA
         if self.infinito:
             self.numero_bioma += 1
+            # o índice só escolhe o estilo de decoração; a fase é gerada
             self._carregar_bioma((self.numero_bioma - 1) % len(config.BIOMAS))
             return True
         if self.bioma_index + 1 >= len(config.BIOMAS):
@@ -467,12 +492,8 @@ class Jogo:
             self._terminar("vitoria")
             return
         if self.infinito:
-            # a cada volta completa, um cartão de checkpoint; entre biomas, o banner
-            if self.numero_bioma % len(config.BIOMAS) == 1 and self.numero_bioma > 1:
-                self.ativo = False
-                self.app.mostrar_volta(self.numero_bioma, self._retomar_do_briefing)
-            else:
-                self.banner_timer = 3.2
+            # sem tela no meio: um aviso curto no topo e a fase emenda
+            self.banner_timer = 2.6
             return
         self.app.mostrar_intervalo(fase_concluida, ao_voltar=self._retomar_do_briefing)
 
@@ -788,11 +809,9 @@ class Jogo:
         pygame.draw.rect(tela, config.NOITE_SUAVE, rodape)
         pygame.draw.line(tela, (24, 33, 50), rodape.topleft, rodape.topright, 1)
 
-        dados = config.BIOMAS[self.bioma_index]
+        dados = self.dados_fase
         if self.infinito:
-            nome = f"Fase {self.numero_bioma} · {dados['nome']}"
-            if self.volta:
-                nome += f" · volta {self.volta + 1}"
+            nome = f"Infinito · Fase {self.numero_bioma} · {dados['fase']}"
         else:
             nome = (f"Fase {self.numero_bioma}/{len(config.BIOMAS)} · "
                     f"{dados['fase']} — {dados['nome']}")
@@ -808,7 +827,7 @@ class Jogo:
     def _desenhar_banner(self, tela: pygame.Surface) -> None:
         if self.banner_timer <= 0:
             return
-        dados = config.BIOMAS[self.bioma_index]
+        dados = self.dados_fase
         t = min(1.0, self.banner_timer / 0.6) if self.banner_timer < 0.6 else 1.0
         alpha = int(255 * utils.suavizar(t))
         painel = pygame.Surface((config.LARGURA, 84), pygame.SRCALPHA)
@@ -816,15 +835,13 @@ class Jogo:
         pygame.draw.line(painel, (*dados["ambiente"], int(120 * t)), (0, 83),
                          (config.LARGURA, 83), 1)
         titulo = f"FASE {self.numero_bioma} · {dados['fase'].upper()}"
-        if self.volta:
-            titulo += f" · VOLTA {self.volta + 1}"
         utils.texto_centrado(painel, self.recursos.fonte("h2_forte"), titulo,
                              dados["ambiente"], config.LARGURA // 2, 30)
         painel.set_alpha(alpha)
         tela.blit(painel, (0, config.HUD_ALTURA))
 
     def _desenhar_dica(self, tela: pygame.Surface) -> None:
-        dados = config.BIOMAS[self.bioma_index]
+        dados = self.dados_fase
         img = utils.texto(self.recursos.fonte("corpo"), dados["dica"], config.TEXTO,
                           sombra=(0, 0, 0))
         caixa = pygame.Rect(0, 0, img.get_width() + 32, img.get_height() + 18)
@@ -992,7 +1009,8 @@ class Jogo:
         som = "mudo" if self.audio.mudo else f"{int(self.audio.volume * 100)}%"
         ui.texto(tela, f_tecla, "STATUS", ui.TEXTO_FRACO, x_dir, caixa.y + 100)
         linhas = [
-            ("Fase", f"{self.bioma_index + 1}/{len(config.BIOMAS)}"),
+            ("Fase", str(self.numero_bioma) if self.infinito
+             else f"{self.bioma_index + 1}/{len(config.BIOMAS)}"),
             ("Orvalho", f"{self.coletados}/{self.necessario}"),
             ("Pontos", f"{self.pontos:05d}"),
             ("Som", som),

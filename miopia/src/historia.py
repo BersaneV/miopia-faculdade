@@ -162,7 +162,7 @@ INFINITO = [
             ("Narrador", "O Breu dormiu com a luz que roubou. E sonhou."),
             ("Breu", "Fica. A noite é minha."),
             ("Narrador", "No sonho, a mata se refaz a cada fase e o sol nunca nasce."),
-            ("Narrador", "Vá o quanto aguentar. A cada volta o sonho aperta: mais bicho, mais escuro, menos fôlego."),
+            ("Narrador", "Vá o quanto aguentar. A cada fase o sonho aperta: mais bicho, menos fôlego."),
         ],
     },
 ]

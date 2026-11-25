@@ -102,6 +102,22 @@ rodar.bat         # Windows (duplo clique)
 | macOS 13 + Python 3.11 | ✅ |
 | Sem áudio (container/CI) | ✅ roda em silêncio |
 
+### Tela cheia e qualidade de imagem
+
+O jogo é desenhado sempre em **960 × 600** (resolução lógica) e a janela amplia essa imagem.
+Dois detalhes garantem que a ampliação **não fique pixelada**:
+
+| O que | Como |
+|---|---|
+| Filtro de ampliação | `SDL_RENDER_SCALE_QUALITY=1` (bilinear), definido em `main.py` **antes** do `pygame.init()`. Sem esse hint o SDL amplia por "vizinho mais próximo" e a imagem vira blocos duros |
+| Proporção | `pygame.SCALED`: a imagem cresce mantendo 16:10 e o que sobra vira faixa preta — nada de esticar e embaçar |
+| Tela cheia | **F11** recria a janela com `SCALED \| FULLSCREEN` (em vez de `toggle_fullscreen`, que perdia o filtro), então a tela cheia herda a mesma escala suave |
+| Sincronia | `vsync=1` quando o sistema aceita, para não rasgar a imagem |
+
+Como tudo é vetorial (formas e fontes desenhadas em código), a suavização funciona bem em
+1920×1080 e 4K. Textos continuam nítidos porque são renderizados com *antialias* na escala
+nativa da fonte.
+
 ### Problemas comuns
 
 | Sintoma | Solução |
@@ -125,7 +141,7 @@ rodar.bat         # Windows (duplo clique)
 | **V** (na pausa) | voltar ao menu |
 | **M** | ligar/desligar o som |
 | **-** / **+** | volume (também na pausa) |
-| **F11** | tela cheia |
+| **F11** | tela cheia (imagem suavizada, sem esticar a proporção) |
 | **Enter / setas** | navegar nos menus (o foco do teclado só aparece depois que você usa as setas) |
 | **A / D** (no menu) | dificuldade: Fácil · Normal · Difícil |
 | **Espaço** / clique | avançar a cutscene (se o texto ainda está sendo escrito, completa de uma vez) |
@@ -308,7 +324,8 @@ a3-jogo/
 ```
 
 **Máquina de estados:** `menu → cutscene → partida ⇄ pausa → cutscene → fim → menu`.
-(No modo infinito não há cutscene entre biomas: o banner anuncia e a partida emenda.)
+(No modo infinito não há cutscene nem tela entre fases: um banner curto anuncia e a partida
+emenda — a jogatina não para.)
 O laço principal roda a 60 FPS e separa entrada, atualização e desenho (`main.py`).
 
 **Dois modos — História é o principal:**
@@ -316,21 +333,30 @@ O laço principal roda a 60 FPS e separa entrada, atualização e desenho (`main
 | Opção do menu | O que acontece |
 |---|---|
 | **História** (principal) | a campanha: 4 biomas emoldurados por cutscenes — prólogo em 3 cenas, uma cena ao entrar em cada bioma e o desfecho (vitória ou derrota) antes da tela final |
-| **Infinito** | *a noite que não acaba*: o Breu sonha e a mata se refaz. Biomas emendados sem cutscene (um banner anuncia), cada **volta** pelos quatro biomas traz mais inimigos, exige mais orvalho e dá menos fôlego; o relógio não tem teto e o placar guarda o bioma mais longe alcançado |
+| **Infinito** | *as fases que não acabam*: o Breu sonha e a mata se refaz. Fases emendadas sem cutscene (um banner anuncia), **cada uma é nova** e entra com mais inimigos que a anterior. Não há chefe e não há amanhecer: a partida termina quando as fagulhas acabam |
 
-**Como o modo infinito escala** (ciclo de 4 biomas = uma volta):
+**O modo infinito não repete a história.** Cada fase é gerada na hora por
+`config.fase_infinita(nivel)` — nome próprio, paleta própria e mais bichos que a anterior:
 
-| Volta | Inimigos extras | Tempo por bioma | Orvalho exigido |
-|---|---|---|---|
-| 1 | +0 | +35 s | valor do bioma |
-| 2 | +1 | +33 s | +1 |
-| 3 | +2 | +31 s | +2 |
-| 4 | +3 | +29 s | +3 |
-| … | até +6 | mínimo +20 s | até o limite do mapa |
+| Fase | Inimigos no mapa | Tipos | Orvalho | Cenário |
+|---|---|---|---|---|
+| 1 | 3 | morcego | 7 | Mata Rasa |
+| 2 | 4 | morcego | 8 | Raiz sem Sol |
+| 5 | 7 | morcego + aranha | 11 | Copa Molhada |
+| 8 | 10 | + sombra | 14 | Raiz Fria |
+| 12 | 14 | todos | 16 | Folha Fechada |
+| 17+ | 19–20 (teto) | todos | 16 | nomes e tons seguem girando |
 
-Ao completar cada volta, um **cartão de checkpoint** ("A mata se refez") mostra o escalonamento
-e o bioma seguinte. O melhor resultado do modo infinito (`melhor_infinito`, em biomas) aparece
-no menu e na tela final.
+- **Sem chefe:** a Coruja só existe no modo história (`"coruja": False` em toda fase infinita).
+- **Nomes:** 6 × 8 combinações (`Mata`, `Raiz`, `Grota`, `Trilha`, `Copa`, `Folha` + `Rasa`,
+  `Fechada`, `Funda`, `sem Sol`, …) — 48 nomes antes de repetir, e o tom do cenário continua
+  girando a cada ciclo.
+- **Fôlego:** o relógio não tem teto, mas o bônus por fase encolhe (35 s → mínimo 18 s), então
+  as fases mais cheias duram menos.
+- **Sem interrupção:** entre uma fase e outra aparece só um **banner de 2,6 s** no topo com o
+  nome da próxima fase — nenhuma tela cheia, nenhum cartão, nenhuma pergunta no meio do sonho.
+  A dica de controle aparece **uma vez**, na fase 1; depois fica só o HUD.
+- O placar guarda **quantas fases** foram vencidas (`melhor_infinito`), no menu e na tela final.
 
 ### Design system de interface (`src/ui.py`)
 
@@ -382,7 +408,7 @@ Cada bioma tem a sua trilha, gerada por `tools/gerar_audio.py` (síntese própri
 | Gruta da Figueira | `trilha_gruta` | 78 BPM, grave, com intervalos de tensão — o Breu e a Coruja |
 
 A música troca sozinha ao entrar no bioma (na partida e também na cutscene daquele bioma).
-No modo infinito, cada volta passa pelas quatro trilhas em sequência.
+No modo infinito a trilha acompanha o estilo do cenário da fase (as quatro se revezam).
 
 #### Histórias fáceis de entender
 
@@ -477,8 +503,8 @@ autoria do que entrega. Nenhuma parte foi copiada de tutorial, repositório ou v
 | Mensagem ambiental + pergunta de compreensão | ![Ambiental](capturas/17_ambiental.png) |
 | Boss fight — a Coruja (status no rodapé, mapa limpo) | ![Chefe](capturas/16_chefe.png) |
 | Cutscene do modo infinito | ![Sonho](capturas/13_infinito.png) |
-| Modo infinito — bioma 9, volta 3 | ![Infinito](capturas/14_infinito_jogo.png) |
-| Checkpoint entre voltas (modo infinito) | ![Volta](capturas/15_volta.png) |
+| Modo infinito — fase 9, mais bichos que a 1 | ![Infinito](capturas/14_infinito_jogo.png) |
+| Modo infinito — aviso curto de fase (emenda sem tela) | ![Banner](capturas/15_infinito_banner.png) |
 | Fim de jogo | ![Fim](capturas/06_fim.png) |
 | Como jogar | ![Ajuda](capturas/07_ajuda.png) |
 | Créditos | ![Créditos](capturas/12_creditos.png) |
@@ -524,7 +550,7 @@ SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy python tests/playtest.py
 | Modo história ponta a ponta | prólogo (3 cenas) → partida → cutscene de bioma → desfecho → tela final, sem travar |
 | Chefe | teste automático confirma detecção, 3 clarões → "acalmada", +500 pontos e colisão desligada |
 | Conteúdo ambiental | 4 fases com mensagem + pergunta; a tela não avança sem resposta e errar não altera a partida |
-| Modo infinito | bot passa de 10 biomas (chega ao bioma 11, volta 3) sem quebrar; escalonamento de inimigos/orvalho/tempo e o checkpoint de volta validados |
+| Modo infinito | 9 fases seguidas: inimigos sempre crescendo (3 → 15), 9 nomes diferentes, nenhum chefe e **nenhuma tela no meio** (emenda com banner curto) |
 | Distribuição do orvalho | 4 biomas com sementes diferentes: orvalho presente nos quatro quadrantes do mapa (antes ficava empilhado perto da saída) |
 | Menu, ajuda, créditos, briefing, fim | navegáveis por teclado e mouse |
 | Reinício por modo | "Jogar de novo" mantém o modo (história continua história; infinito continua infinito) |
@@ -553,7 +579,7 @@ python tools/gerar_capturas.py    # recria capturas/ sem abrir janela
 - [x] Gráfico coerente, HUD legível, animações e feedback visual
 - [x] Música e efeitos equilibrados, opção de silenciar (M) e volume (-/+)
 - [x] História dentro do jogo (modo História principal com 9 cutscenes, textos entre biomas, dois finais)
-- [x] Modo infinito com escalonamento por volta e recorde próprio
+- [x] Modo infinito com fases geradas (mais inimigos a cada fase, sem chefe) e recorde próprio
 - [x] README com como rodar, controles, regras, divisão de tarefas, créditos, tecnologia e IA
 - [x] Assets de terceiros com autor, link e licença (só as duas fontes OFL)
 - [ ] Tecnologia justificada se não for pygame — **não se aplica** (é pygame)

@@ -43,7 +43,7 @@ CONTROLES
   V (na pausa) ........ voltar ao menu
   M ................... som ligado/desligado
   - e + ............... volume
-  F11 ................. tela cheia
+  F11 ................. tela cheia (imagem suavizada, proporção mantida)
   Setas + Enter ....... navegar nos menus
   A / D (no menu) ..... dificuldade (Fácil / Normal / Difícil)
   Espaço / clique ..... avançar cutscene
@@ -58,10 +58,13 @@ DOIS MODOS DE JOGAR
               (vitória ou derrota) antes da tela final.
               Espaço avança a cutscene, Esc pula. Nada é obrigatório.
 
-  Infinito .. "A NOITE QUE NÃO ACABA". O Breu sonha e a mata se refaz:
-              as fases emendam sem cutscene, cada volta pelas quatro
-              fases traz mais inimigos, pede mais orvalho e dá menos
-              fôlego. O relógio não tem teto e o amanhecer nunca chega:
+  Infinito .. "AS FASES QUE NÃO ACABAM". O Breu sonha e a mata se refaz:
+              as fases emendam sem cutscene e sem tela no meio (só um
+              aviso curto no topo) e NÃO repetem a história:
+              cada fase é nova, com nome próprio, e entra com mais
+              inimigos que a anterior, pede mais orvalho e dá menos
+              fôlego. NÃO tem chefe: a Coruja é só da história.
+              O relógio não tem teto e o amanhecer nunca chega:
               a partida acaba quando as três fagulhas se apagam.
               O menu guarda quantas fases você alcançou.
 
@@ -93,8 +96,8 @@ CHEFE (FASE 4) — A CORUJA
 MÚSICA
 ------
   Cada fase tem a sua trilha: bosque (doce), córrego (água), taquaral
-  (tenso) e gruta (grave). No modo infinito elas se alternam a cada
-  volta. M liga/desliga e - / + ajustam o volume.
+  (tenso) e gruta (grave). No modo infinito elas se revezam conforme o
+  cenário de cada fase. M liga/desliga e - / + ajustam o volume.
 
 
 OBJETIVO

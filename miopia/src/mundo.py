@@ -19,10 +19,11 @@ from . import utils
 
 
 class Mundo:
-    def __init__(self, bioma: int, semente: int) -> None:
-        self.bioma = bioma
+    def __init__(self, bioma: int, semente: int, dados: dict | None = None) -> None:
+        self.bioma = bioma            # estilo de decoração (0 a 3)
         self.semente = semente
-        self.dados = config.BIOMAS[bioma]
+        # no modo infinito o chamador passa um descritor gerado na hora
+        self.dados = dados if dados is not None else config.BIOMAS[bioma]
         self.colunas = config.COLUNAS
         self.linhas = config.LINHAS
         self.sorteio = random.Random(semente)
@@ -274,13 +275,19 @@ class Mundo:
     def _distribuir_inimigos(self) -> None:
         self.inimigos = []
         ocupados: list[tuple[int, int]] = []
+        # mapas com muitos inimigos (modo infinito) aceitam espaçamento menor,
+        # senão o mapa "recusa" os bichos e a fase fica mais fácil que a anterior
+        total = sum(self.dados["inimigos"].values())
+        espaco = 2 if total >= 12 else 3
+        distancia_min = 6 if total >= 12 else 7
         for tipo, quantidade in self.dados["inimigos"].items():
             for _ in range(quantidade):
                 opcoes = [
                     c for c, d in self._distancias.items()
-                    if d >= 7
+                    if d >= distancia_min
                     and c != self.celula_saida
-                    and all(abs(c[0] - o[0]) + abs(c[1] - o[1]) >= 3 for o in ocupados)
+                    and all(abs(c[0] - o[0]) + abs(c[1] - o[1]) >= espaco
+                            for o in ocupados)
                 ]
                 if not opcoes:
                     continue

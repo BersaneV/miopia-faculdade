@@ -115,8 +115,14 @@ def jogar(seed, verbose=False, modo="historia", biomas_alvo=4):
 
         app._atualizar(DT); frames+=1
 
-        # o app pode abrir briefing/cutscene entre biomas: volta para a partida
-        if app.estado in ("briefing", "cutscene"):
+        # o app pode abrir mensagem ambiental/briefing/cutscene entre fases:
+        # o bot responde a pergunta e volta para a partida
+        if app.estado == "ambiental":
+            tela = app.tela_atual
+            tela._responder(tela.conteudo["correta"])
+            tela._seguir()
+            danos.clear(); frames=0; bioma_visto=j.numero_bioma
+        elif app.estado in ("briefing", "cutscene"):
             res.append((j.numero_bioma, round(frames*DT), j.jogador.vidas, j.pontos))
             if verbose:
                 print(f"   bioma {j.numero_bioma}: {frames*DT:.0f}s vidas={j.jogador.vidas} pontos={j.pontos} danos={danos}")
@@ -135,6 +141,7 @@ def jogar(seed, verbose=False, modo="historia", biomas_alvo=4):
 
 def teste_parado():
     """Jogador sem input: a luz acaba e as vidas caem."""
+    random.seed(1)               # saída determinística (o mapa é sorteado)
     app=App(); tk=T(); pygame.key.get_pressed=lambda: tk
     app._trocar("jogo", _TelaVazia(app)); app.jogo.iniciar()
     j=app.jogo
@@ -203,11 +210,50 @@ if __name__ == "__main__":
     assert bloqueado and errou_sem_punir and seguiu
 
     print()
-    print("=== bot no modo infinito (10 biomas) ===")
+    print("=== modo infinito: fases novas, mais inimigos a cada fase, sem chefe ===")
+    app_inf = App(); app_inf.modo_historia = False
+    pygame.key.get_pressed = lambda: T()
+    app_inf._trocar("jogo", _TelaVazia(app_inf)); app_inf.jogo.iniciar("infinito")
+    ji = app_inf.jogo
+    contagem, nomes, chefes = [], [], []
+    for _ in range(9):
+        contagem.append(len(ji.inimigos))
+        nomes.append(ji.dados_fase["fase"])
+        chefes.append(ji.chefe is not None)
+        ji.coletados = ji.necessario
+        ji._fechar_bioma()
+        if not ji.ativo:
+            ji._retomar_do_briefing()
+    cresceu = all(b >= a for a, b in zip(contagem, contagem[1:])) and contagem[-1] > contagem[0]
+    # nenhuma fase do infinito pode falar da Coruja (ela é só da história)
+    chefes_no_texto = [n for n in range(1, 25)
+                       if "coruja" in config.fase_infinita(n)["dica"].lower()]
+    print(f"inimigos por fase: {contagem} | nomes únicos: {len(set(nomes))}/{len(nomes)} "
+          f"| chefe em alguma fase: {any(chefes)} | dicas com Coruja: {chefes_no_texto}")
+    assert not chefes_no_texto, "o infinito não deve ter texto de chefe"
+    assert cresceu, "o modo infinito deve escalar inimigos"
+    assert not any(chefes), "o modo infinito não tem chefe"
+    assert len(set(nomes)) >= 6, "as fases não devem repetir o mesmo nome"
+
+    # no infinito a partida NUNCA sai da tela de jogo entre fases
+    app_inf._trocar("jogo", _TelaVazia(app_inf)); app_inf.jogo.iniciar("infinito")
+    ji = app_inf.jogo
+    telas = set()
+    for _ in range(8):
+        ji.coletados = ji.necessario
+        ji._fechar_bioma()
+        for _ in range(4):
+            app_inf._atualizar(DT)
+        telas.add(app_inf.estado)
+    print(f"telas no meio do infinito: {sorted(telas)} (só 'jogo' = emenda direta)")
+    assert telas == {"jogo"}, "o infinito não deve abrir tela entre fases"
+
+    print()
+    print("=== bot no modo infinito (10 fases) ===")
     j, res = jogar(11, modo="infinito", biomas_alvo=10)
-    print(f"infinito: chegou ao bioma {j.numero_bioma} (volta {j.volta+1}), "
+    print(f"infinito: chegou à fase {j.numero_bioma}, "
           f"fim={j.fim}, pontos={j.pontos}, tempo={j.tempo:.0f}s")
-    assert j.numero_bioma >= 6, "o modo infinito deveria passar dos 4 biomas"
+    assert j.numero_bioma >= 6, "o modo infinito deveria passar de várias fases"
 
     print("\n=== bot parado ===")
     teste_parado()

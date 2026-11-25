@@ -12,9 +12,10 @@ Responsabilidades deste arquivo:
 Dois modos:
   · HISTÓRIA (principal) — a partida emoldurada por cutscenes: prólogo em
       3 cenas, uma cena ao entrar em cada bioma e o desfecho (vitória/derrota);
-  · INFINITO — a noite que não acaba: biomas emendados sem cutscene, cada
-      volta pelos quatro biomas fica mais escura, mais cheia e mais faminta.
-      Não há amanhecer: a partida termina quando as fagulhas acabam.
+  · INFINITO — a noite que não acaba: fases emendadas sem cutscene e sem
+      chefe. Cada fase é nova (não é a história repetida): entra com mais
+      inimigos que a anterior, com cenário e nome próprios. Não há
+      amanhecer: a partida termina quando as fagulhas acabam.
 
 O jogo em si (regras da partida) fica em jogo.py.
 """
@@ -26,6 +27,15 @@ import sys
 
 # garante que "src" seja importável quando o script é rodado direto
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# ---------------------------------------------------------------------------
+# Qualidade da escala: o jogo é desenhado em 960x600 e a janela/tela cheia
+# amplia essa imagem. Sem esse hint, o SDL usa "vizinho mais próximo" e a
+# imagem fica pixelada (blocos duros). Com "1" a ampliação é suavizada
+# (bilinear), o que deixa texto e curvas limpos em qualquer tamanho de tela.
+# Precisa ser definido ANTES do pygame.init().
+# ---------------------------------------------------------------------------
+os.environ.setdefault("SDL_RENDER_SCALE_QUALITY", "1")
 
 import pygame
 
@@ -42,12 +52,8 @@ class App:
     def __init__(self) -> None:
         pygame.init()
         pygame.display.set_caption(config.TITULO)
-        try:
-            self.tela = pygame.display.set_mode(
-                (config.LARGURA, config.ALTURA), pygame.SCALED | pygame.RESIZABLE
-            )
-        except pygame.error:
-            self.tela = pygame.display.set_mode((config.LARGURA, config.ALTURA))
+        self.tela_cheia = False
+        self.tela = self._criar_janela(False)
         pygame.display.set_icon(self._criar_icone())
 
         self.relogio = pygame.time.Clock()
@@ -75,6 +81,38 @@ class App:
         self.quadros = 0
 
     # ------------------------------------------------------------------ #
+    # Janela
+    # ------------------------------------------------------------------ #
+    def _criar_janela(self, cheia: bool):
+        """
+        Cria a janela (ou a tela cheia) mantendo a resolução LÓGICA 960x600.
+
+        Com `pygame.SCALED` o jogo continua desenhando em 960x600: o SDL
+        amplia essa imagem para o tamanho real da janela preservando a
+        proporção (faixas pretas em vez de esticar). Junto com o hint de
+        escala definido no topo do arquivo, a ampliação sai suave em vez de
+        pixelada — é isso que muda a qualidade em tela cheia.
+        """
+        bandeiras = pygame.SCALED | pygame.RESIZABLE
+        if cheia:
+            bandeiras |= pygame.FULLSCREEN | pygame.NOFRAME
+        try:
+            tela = pygame.display.set_mode((config.LARGURA, config.ALTURA),
+                                           bandeiras, vsync=1)
+        except (pygame.error, TypeError):
+            try:
+                tela = pygame.display.set_mode((config.LARGURA, config.ALTURA), bandeiras)
+            except pygame.error:
+                tela = pygame.display.set_mode((config.LARGURA, config.ALTURA))
+        return tela
+
+    def alternar_tela_cheia(self) -> None:
+        """F11: alterna janela e tela cheia sem perder a escala suave."""
+        self.tela_cheia = not self.tela_cheia
+        self.tela = self._criar_janela(self.tela_cheia)
+        # a superfície muda de identidade; o áudio e os recursos não.
+        self.quadros = 0
+
     def _criar_icone(self) -> pygame.Surface:
         icone = pygame.Surface((32, 32), pygame.SRCALPHA)
         pygame.draw.circle(icone, (*config.LUZ_QUENTE, 90), (16, 16), 14)
@@ -144,25 +182,6 @@ class App:
 
         self._trocar("briefing", Briefing(self, bioma, continuar))
 
-    def mostrar_volta(self, numero_bioma: int, ao_voltar) -> None:
-        """Checkpoint a cada volta completa do modo infinito."""
-        jogo = self.jogo
-        volta = jogo.volta
-
-        def continuar() -> None:
-            self._trocar("jogo", _TelaVazia(self))
-            ao_voltar()
-
-        self._trocar("briefing", Briefing(
-            self, jogo.bioma_index, continuar,
-            chip_texto=f"VOLTA {volta + 1}",
-            titulo="A mata se refez",
-            texto=("O sonho do Breu recomeça: a mata se refaz igual e mais escura. "
-                   "Mais bichos, menos orvalho por canto e menos fôlego a cada volta."),
-            meta=f"fase {numero_bioma} · junte {jogo.necessario} orvalhos para seguir",
-            rotulo_botao="Continuar o sonho",
-        ))
-
     def mostrar_intervalo(self, bioma: int, ao_voltar) -> None:
         """Chamado ao terminar um bioma (só no modo história)."""
         if not self.modo_historia:
@@ -220,7 +239,8 @@ class App:
 
     def registrar_fim(self, jogo) -> bool:
         if jogo.infinito:
-            bioma = jogo.numero_bioma
+            # no infinito o recorde é quantas FASES foram concluídas
+            bioma = max(0, jogo.numero_bioma - 1)
             infinito = True
         else:
             bioma = jogo.bioma_index + 1
@@ -253,7 +273,7 @@ class App:
                 self.rodando = False
                 return
             if evento.type == pygame.KEYDOWN and evento.key == pygame.K_F11:
-                pygame.display.toggle_fullscreen()
+                self.alternar_tela_cheia()
                 continue
             if self.estado == "jogo":
                 if self.jogo.tratar_evento(evento):

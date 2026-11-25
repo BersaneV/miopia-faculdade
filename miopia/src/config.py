@@ -70,6 +70,88 @@ FONTE_NEGRITO = os.path.join(FONTES, "Nunito-Bold.ttf")
 FONTE_TEXTO = os.path.join(FONTES, "Nunito-Regular.ttf")
 
 # --------------------------------------------------------------------------
+# Modo infinito: cada fase é uma fase NOVA (não repete as da história).
+#
+# O escalonamento é por fase: a cada fase entra mais inimigo, o cenário muda
+# de cor e o tempo de bônus encolhe. Não existe chefe aqui — a Coruja é só da
+# história.
+# --------------------------------------------------------------------------
+LIMITE_INIMIGOS_INFINITO = 20        # teto por fase (cabe no mapa)
+
+# nomes combinados (todas as palavras no feminino, para concordar):
+# 6 × 8 = 48 nomes diferentes antes de qualquer repetição
+# dicas do infinito: NENHUMA fala da Coruja (o chefe é só da história)
+_DICAS_INFINITO = {
+    0: "Sua luz é curta. Colete orvalho para mantê-la viva.",
+    1: "Aranhas sentem a luz chegando. Passe longe das teias.",
+    2: "Sombras congelam quando você está bem iluminado.",
+    3: "A mata do sonho é funda: ande devagar e guarde o clarão.",
+}
+
+_NOMES_BASE = ["Mata", "Raiz", "Grota", "Trilha", "Copa", "Folha"]
+_NOMES_SUFIXO = ["Rasa", "Fechada", "Funda", "sem Sol", "Molhada", "Fria",
+                 "Antiga", "Seca"]
+
+
+def _girar_cor(cor, passos: int):
+    """Gira os canais RGB: mudança de tom sem estourar o brilho."""
+    passos %= 3
+    canais = list(cor)
+    return tuple(canais[passos:] + canais[:passos])
+
+
+def _ajustar_cor(cor, fator: float):
+    return tuple(max(0, min(255, int(round(c * fator)))) for c in cor)
+
+
+def fase_infinita(nivel: int) -> dict:
+    """
+    Descreve a fase `nivel` (1, 2, 3, …) do modo infinito.
+
+    - cenário: a paleta de base gira e clareia um pouco a cada ciclo de 4
+      fases, então a mata nunca é exatamente a mesma fase de novo;
+    - inimigos: a cada fase entra um bicho a mais; tipos novos entram em
+      3 e em 6;
+    - orvalho: sobe junto, porque o mapa também fica maior de perigo.
+    """
+    base = BIOMAS[(nivel - 1) % len(BIOMAS)]
+    ciclo = (nivel - 1) // len(BIOMAS)
+    brilho = 1.0 + 0.04 * ciclo
+    girar = nivel % 3          # cada fase desloca o tom: 12 combinações de cor
+
+    total = min(LIMITE_INIMIGOS_INFINITO, 2 + nivel)
+    tipos = ["morcego"]
+    if nivel >= 3:
+        tipos.append("aranha")
+    if nivel >= 6:
+        tipos.append("sombra")
+    inimigos: dict[str, int] = {}
+    for i in range(total):
+        tipo = tipos[i % len(tipos)]
+        inimigos[tipo] = inimigos.get(tipo, 0) + 1
+
+    nome = (f"{_NOMES_BASE[(nivel - 1) % len(_NOMES_BASE)]} "
+            f"{_NOMES_SUFIXO[((nivel - 1) * 3) % len(_NOMES_SUFIXO)]}")
+    return {
+        "fase": nome,                       # título mostrado no banner/cartão
+        "nome": f"Sonho {nivel}",           # subtítulo
+        "curto": nome.split()[0],
+        "trilha": base["trilha"],
+        "dica": _DICAS_INFINITO[(nivel - 1) % len(BIOMAS)],
+        "chao": _ajustar_cor(_girar_cor(base["chao"], girar), brilho),
+        "parede": _ajustar_cor(_girar_cor(base["parede"], girar), brilho),
+        "parede_topo": _ajustar_cor(_girar_cor(base["parede_topo"], girar), brilho),
+        "ambiente": _ajustar_cor(_girar_cor(base["ambiente"], girar), 1.0),
+        "necessario": min(6 + nivel, 16),
+        "inimigos": inimigos,
+        "coruja": False,                    # modo infinito não tem chefe
+        "semente_extra": min(6, nivel // 2),
+        "nivel": nivel,
+        "total_inimigos": total,
+    }
+
+
+# --------------------------------------------------------------------------
 # Balanceamento do jogador
 # --------------------------------------------------------------------------
 VEL_MAX = 168.0           # px/s andando

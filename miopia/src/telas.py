@@ -286,7 +286,7 @@ class Menu(Tela):
               pygame.Rect(90, 190, 384, 62), TEXTO_FRACO, entrelinha=1.4,
               centralizar_vertical=False)
         texto(tela, self.recursos.fonte("pequena"),
-              "História: 4 fases · Infinito: a noite que não acaba", ACENTO, 90, 256)
+              "História: 4 fases · Infinito: fases que não acabam", ACENTO, 90, 256)
 
         # ---------------- botões ----------------
         self._posicionar()
@@ -403,7 +403,8 @@ class Ajuda(Tela):
 
         itens = [
             ("Objetivo", "coletar o orvalho da fase e voar até a colônia antes do amanhecer"),
-            ("Modos", "História: 4 fases e dois desfechos · Infinito: a noite que não acaba"),
+            ("Modos", "História: 4 fases e dois desfechos · "
+                      "Infinito: fases cada vez mais cheias, sem chefe"),
             ("Luz", "cada segundo gasta energia; sem energia a visão fecha e você perde vidas"),
             ("Orvalho", "recupera a luz — o orvalho dourado recupera muito mais"),
             ("Clarão", "Espaço: afasta morcegos, atordoa aranhas e cega a Coruja"),
@@ -581,8 +582,9 @@ class Fim(Tela):
               config.LARGURA // 2, 76, alinhamento="centro", sombra=(0, 0, 0))
 
         if self.infinito:
-            resumo = ("O Breu sonhou até onde você aguentou. A mata se refaz, escura como "
-                      "antes — e o amanhecer continua do outro lado do sonho.")
+            resumo = ("O Breu sonhou até onde você aguentou. Cada fase veio com mais "
+                      "bichos que a anterior — e o amanhecer continua do outro lado "
+                      "do sonho.")
         elif self.vitoria:
             resumo = ("O sol nasce e a colônia acende. Você ainda não enxerga longe, mas "
                       "reconhece cada ponto de luz.")
@@ -601,7 +603,7 @@ class Fim(Tela):
         if self.infinito:
             colunas = [
                 ("PONTOS", f"{self.jogo.pontos:05d}", TEXTO),
-                ("FASES", str(self.jogo.numero_bioma), ACENTO),
+                ("FASES", str(max(0, self.jogo.numero_bioma - 1)), ACENTO),
                 ("MELHOR", str(int(self.dados.get("melhor_infinito", 0))), config.OURO),
             ]
         else:
@@ -653,7 +655,8 @@ TEXTO_BIOMA = {
 class Briefing(Tela):
     def __init__(self, app, bioma: int, ao_continuar, *, titulo: str | None = None,
                  chip_texto: str | None = None, texto: str | None = None,
-                 meta: str | None = None, rotulo_botao: str = "Começar a fase") -> None:
+                 meta: str | None = None, rotulo_botao: str = "Começar a fase",
+                 dados_alt: dict | None = None) -> None:
         super().__init__(app)
         self.bioma = bioma
         self.ao_continuar = ao_continuar
@@ -661,6 +664,7 @@ class Briefing(Tela):
         self.chip_alt = chip_texto
         self.texto_alt = texto
         self.meta_alt = meta
+        self.dados_alt = dados_alt
         self.botoes = [Botao(rotulo_botao, self._continuar, largura_min=280,
                              centralizar=True)]
         self.app.deixar_espaco_livre = False
@@ -676,7 +680,7 @@ class Briefing(Tela):
     def desenhar(self, tela: pygame.Surface) -> None:
         super().desenhar(tela)
         scrim(tela, 150)
-        dados = config.BIOMAS[self.bioma]
+        dados = self.dados_alt or config.BIOMAS[self.bioma]
         cor_ambiente = dados["ambiente"]
 
         self.cabecalho(tela,
@@ -696,6 +700,10 @@ class Briefing(Tela):
         altura_painel = altura_texto + 24 + 24 + 96
 
         topo = 214 if not self.titulo_alt else 198
+        # se o botão não couber abaixo do painel, o painel sobe
+        espaco_baixo = config.ALTURA - 34 - 18 - 52 - 18
+        if topo + altura_painel > espaco_baixo:
+            topo = max(160, espaco_baixo - altura_painel)
         caixa = pygame.Rect((config.LARGURA - largura_painel) // 2, topo,
                             largura_painel, altura_painel)
         painel(tela, caixa, raio=RAIO["lg"], alpha=250, brilho_topo=True)
@@ -719,9 +727,14 @@ class Briefing(Tela):
               f"coletar {dados['necessario']} orvalhos e alcançar a colônia antes do amanhecer",
               ACENTO, caixa.x + 52, y + 40)
 
+        # o botão nunca encosta no painel nem no rodapé: se o texto for
+        # longo, o painel sobe e o botão desce, os dois com folga de 16 px
+        altura_botao = self.botoes[0].ret.height
+        limite_baixo = config.ALTURA - 34 - 18 - altura_botao
+        y_botao = min(limite_baixo, max(caixa.bottom + 18, limite_baixo))
         self.botoes[0].desenhar(tela, self.recursos.fonte("botao"),
                                 x=config.LARGURA // 2 - self.botoes[0].ret.width // 2,
-                                y=min(config.ALTURA - 96, caixa.bottom + 26))
+                                y=y_botao)
         self.rodape(tela, "Enter começar", "Esc volta ao menu")
 
     def tratar_evento(self, evento) -> None:
