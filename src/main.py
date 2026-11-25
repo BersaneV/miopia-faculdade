@@ -363,12 +363,12 @@ class App:
                     self.jogo.reiniciar()
                     self.salvar_campanha()
                     self.jogar()
-            elif self.ensaio==INDICE_ARANHA: self.voltar_aos_ensaios()
+            elif self.ensaio is not None: self.voltar_aos_ensaios()
             else: self.menu()
         elif estado=="confirmar":
             if i==0: self.mudar("menu" if self.confirmacao=="nova" else "pausa")
             elif self.confirmacao=="nova": self.iniciar("historia")
-            elif self.ensaio==INDICE_ARANHA:
+            elif self.ensaio is not None:
                 self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
             else:
                 self.jogo.reiniciar()
@@ -393,9 +393,11 @@ class App:
 
     def perguntar_reinicio(self):
         if self.ensaio==INDICE_ARANHA:
-            self.confirmar("marco","Repetir o duelo?","A tentativa atual fica registrada. Lume e a aranha voltam às posições desta semente.","Repetir a semente")
-            return
-        self.confirmar("marco","Voltar ao marco?","Lume recupera a luz. As portas abertas, as gotas e os registros continuam na jornada.","Voltar ao marco")
+            self.confirmar("ensaio","Repetir o duelo?","A tentativa atual fica registrada. Lume e a aranha voltam às posições desta semente.","Repetir a semente")
+        elif self.ensaio is not None:
+            self.confirmar("ensaio","Repetir o ensaio?","Lume, os inimigos e os itens voltam ao estado inicial deste ensaio.","Repetir o ensaio")
+        else:
+            self.confirmar("marco","Voltar ao marco?","Lume recupera a luz. As portas abertas, as gotas e os registros continuam na jornada.","Voltar ao marco")
 
     def abrir_diario(self,origem):
         self.anterior=origem

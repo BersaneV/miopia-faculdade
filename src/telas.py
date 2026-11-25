@@ -132,9 +132,10 @@ def pausa(a,s):
     texto(s,"Pausa",480,106,44,OSSO,"titulo","centerx")
     nomes=a.pausa_nomes.copy()
     if a.ensaio is not None:
-        nomes[-1]="Voltar ao campo de testes"
+        nomes[3:]=["Repetir o ensaio","Voltar ao campo de testes"]
     opcoes(a,s,nomes,315,176,330,39)
     dica=(f"Semente {a.jogo.semente}   ·   R para repetir" if a.ensaio==INDICE_ARANHA
+          else "R para repetir o ensaio" if a.ensaio is not None
           else "O tempo da mata está suspenso.")
     texto(s,dica,480,414,15,PALIDO,"normal","centerx")
 
@@ -145,18 +146,19 @@ def morte(a,s):
     painel(s,(177,102,606,338))
     texto(s,"Você morreu",480,135,58,OSSO,"titulo","centerx")
     terminal=j.estado=="derrota"
-    if terminal and j.modo=="historia":
+    if terminal and j.modo=="historia" and a.ensaio is None:
         detalhe=FINAL["derrota"][1]
     else:
         detalhe=('A habilidade consumiu a última vida de Lume.' if j.motivo_morte=='sacrificio' else
                  'Lume caiu no vão.' if j.motivo_morte=='queda' else 'A vida de Lume se esgotou.')
-        detalhe += (" Resta uma fagulha." if j.lume.vidas==1 else
-                    f" Restam {j.lume.vidas} fagulhas." if j.lume.vidas else " A última fagulha se apagou.")
+        if a.ensaio is None:
+            detalhe += (" Resta uma fagulha." if j.lume.vidas==1 else
+                        f" Restam {j.lume.vidas} fagulhas." if j.lume.vidas else " A última fagulha se apagou.")
     paragrafo(s,detalhe,212,222,536,18,PALIDO)
     nome="Voltar ao último marco"
     if a.ensaio is not None:
         nome="Repetir o ensaio"
-    voltar="Voltar ao campo de testes" if a.ensaio==INDICE_ARANHA else "Voltar ao menu"
+    voltar="Voltar ao campo de testes" if a.ensaio is not None else "Voltar ao menu"
     opcoes(a,s,[nome,voltar],209,328,540,40,19)
 
 
