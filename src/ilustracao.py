@@ -1,5 +1,7 @@
 """Tipografia, imagens e pequenos sinais compartilhados pelas telas."""
 from functools import lru_cache
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 import pygame
 
@@ -12,6 +14,35 @@ TINTA = (10, 18, 23)
 TEAL = (104, 139, 132)
 PERIGO = (245, 154, 122)
 ROMANOS = ("I", "II", "III", "IV")
+_leitura = ContextVar("leitura", default=(100, False, False, None))
+
+
+@contextmanager
+def estilo(preferencias, controles=None):
+    estado = (preferencias.get("texto",100), preferencias.get("contraste",False),
+              preferencias.get("claroes_suaves",False), controles)
+    anterior = _leitura.set(estado)
+    try:
+        yield
+    finally:
+        _leitura.reset(anterior)
+
+
+def tamanho_texto(tam):
+    return round(tam*_leitura.get()[0]/100) if tam <= 22 else tam
+
+
+def alto_contraste():
+    return _leitura.get()[1]
+
+
+def claroes_suaves():
+    return _leitura.get()[2]
+
+
+def dica_teclado(msg):
+    controles = _leitura.get()[3]
+    return controles.dicas(msg) if controles is not None else msg
 
 
 @lru_cache(maxsize=48)
@@ -27,7 +58,9 @@ def tinta(msg, tamanho, cor, estilo):
 
 
 def texto(surf, msg, x, y, tam=17, cor=OSSO, estilo="normal", alinhar="left"):
-    im = tinta(str(msg), tam, cor, estilo)
+    if alto_contraste():
+        cor = tuple(round(c*.76 + 61) for c in cor)
+    im = tinta(str(msg), tamanho_texto(tam), cor, estilo)
     rect = im.get_rect(top=y)
     setattr(rect, alinhar, x)
     surf.blit(im, rect)
@@ -35,7 +68,7 @@ def texto(surf, msg, x, y, tam=17, cor=OSSO, estilo="normal", alinhar="left"):
 
 
 def linhas(msg, largura, tam=17, estilo="normal"):
-    f = fonte(tam, estilo)
+    f = fonte(tamanho_texto(tam), estilo)
     linha = ""
     out = []
     for palavra in msg.split():
@@ -53,7 +86,7 @@ def linhas(msg, largura, tam=17, estilo="normal"):
 def paragrafo(surf, msg, x, y, largura, tam=17, cor=OSSO, estilo="normal", entre=None):
     for linha in linhas(msg, largura, tam, estilo):
         texto(surf, linha, x, y, tam, cor, estilo)
-        y += entre or (tam + 5)
+        y += entre or (tamanho_texto(tam) + 5)
     return y
 
 
@@ -89,7 +122,7 @@ def manivela(surf, x, pe, largura, altura, girada):
 
 def losango(surf, x, y, r=4, cor=AMBAR, cheio=True):
     pts = ((x,y-r),(x+r,y),(x,y+r),(x-r,y))
-    pygame.draw.polygon(surf, cor, pts, 0 if cheio else 1)
+    pygame.draw.polygon(surf, cor, pts, 0 if cheio else 1 + int(alto_contraste()))
 
 
 @lru_cache(maxsize=90)
@@ -101,7 +134,7 @@ def placa(w, h, opacidade=213):
 
 def painel(surf, r, friso=True):
     r = pygame.Rect(r)
-    surf.blit(placa(r.w,r.h),r)
+    surf.blit(placa(r.w,r.h,249 if alto_contraste() else 213),r)
     if friso:
         pygame.draw.line(surf, TEAL, r.topleft,(r.right-1,r.top))
         pygame.draw.line(surf, (53,72,70), r.bottomleft,(r.right-1,r.bottom))

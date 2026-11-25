@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 import pygame
+from . import aula_sino, vento_taquaral
 
 CHAO = 442
 # O arquivo salvo guarda o identificador do marco; sua posição vem da planta atual.
@@ -118,11 +119,12 @@ FASES = (
     Fase(
         "Taquaral",
         ((0, 920), (1235, 1480), (1555, LARGURA)),
-        ((318, 377, 146), (508, 310, 154), (685, 243, 135), (1300, 375, 135)),
-        ((1618, 350, 115, 68),),
+        (vento_taquaral.BEIRAL, (318, 377, 146), (508, 310, 154), (685, 243, 135), (1300, 375, 135)),
+        ((1618, 350, 115, 68), vento_taquaral.ABA, vento_taquaral.POUSO),
         (O("eco", "npc", 245, CHAO, "Eco"), O("risca", "npc", 604, 310, "Risca"),
          O("registro", "registro", 745, 243, "Pele de taquara"),
          O("no", "no", 830, CHAO, "Acender o nó lateral"),
+         O(vento_taquaral.PAVIO, "pavio_nicho", 443, vento_taquaral.POUSO[1], "Recolher o pavio sob a aba"),
          O("brasa", "brasa", 1370, 375, "Recolher a brasa de seiva")),
         {"no": M("", "", "O brilho de Eco alcança três apoios no vão. As sombras encolhem.", ("raiz",)),
          "brasa": M("no", "A fonte só amadurece sob o nó aceso.", "A brasa pulsa em sua casca. Além da ponte quebrada, há uma vagem seca.", ("coleta", "porta"))},
@@ -207,17 +209,21 @@ RAMAIS = (
           "Plane do bambuzal quebrado até a vagem na outra margem",
           "A vagem se abre ao calor. A raiz conduz o cheiro de volta a Eco."),
     Ramal("Câmara da escuta",
-          ((1780, 2380), (2670, 3040), (3260, LARGURA)),
+          ((1780, 2380), (3260, LARGURA)),
           ((1982, 374, 122, 15, "plataforma"), (2141, 307, 136, 15, "plataforma"),
            (2265, 237, 136, 15, "plataforma"), (2370, 237, 40, 232, "parede"),
-           (2410, 237, 252, 15, "grade"), (2370, 469, 320, 95, "chao"),
+           (2410, 237, 166, 15, "grade"), (2370, 469, 206, 95, "chao"),
            (2410, 384, 74, 15, "plataforma"), (2434, 306, 70, 15, "plataforma"),
-           (2658, 237, 46, 232, "comporta"), (2820, 370, 115, 15, "plataforma"),
-           (2950, 315, 91, 15, "plataforma"), (3160, 357, 72, 15, "plataforma"),
+           (2576, 0, 41, aula_sino.FUNDO, "comporta"),
+           (2574, aula_sino.FUNDO, 466, 110, "chao"),
+           (2564, 561, 82, 15, "grade"), (2678, 628, 150, 15, "plataforma"),
+           (2780, 561, 160, 15, "plataforma"), (2904, 500, 108, 15, "plataforma"),
+           (2940, CHAO, 100, 16, "grade"),
+           (2960, 367, 80, 15, "plataforma"), (3160, 357, 72, 15, "plataforma"),
            (3340, 353, 120, 15, "plataforma")),
-          O("eco_antigo", "sino", 2530, 469, "Ouvir o sino soterrado"),
-          (2310, 237), ((2020, 346), (2500, 440), (2858, 340)),
-          (("vespa", 2090, 334), ("sombra", 2870, CHAO), ("carabideo", 3415, CHAO)),
+          O(aula_sino.ECO, "sino", *aula_sino.SINO, "Tocar o sino soterrado"),
+          (2310, 237), ((2020, 346), (2500, 440), (2858, 674)),
+          (("vespa", 2090, 334), ("sombra", 2870, aula_sino.FUNDO), ("carabideo", 3415, CHAO)),
           "Na câmara, desça pela grade para tocar o sino soterrado",
           "O sino devolve três batidas. Por baixo da figueira, a guardiã responde."),
 )
@@ -252,7 +258,8 @@ FALAS = {
              "Agora posso redesenhar a trilha até o berçário. Vou deixar os ninhos vazios no mapa."),
     "Véspera": ("Canto três vezes. O eco responde do galho à minha esquerda. Havia ninhos ali.",
                 "Quando o morcego dobrar as asas, procure os riscos na parede. Ele não consegue frear.",
-                "Hoje, entre um canto e outro, ouvi alguém voltar."),
+                "Reconheci a primeira gota pelo barulho na casca. Usei as amarras dos casulos na ponte. "
+                "Fico aqui para firmar os nós. Se alguém voltar atrasado, a travessia já estará pronta."),
     "Casca": ("Fechei a comporta quando Brasa pediu. Não contei a Fio por que o canal secou.",
               "A corrente empurra quem anda devagar. Use o deslize sob a raiz, a lingueta está na outra margem.",
               "Ainda tenho a chave. Desta vez vou deixá-la ao alcance de Fio."),
@@ -280,9 +287,9 @@ FALAS = {
     "Candeia": ("Estou contando as luzes. Daqui só vejo a do centro.",
                 "Uma veia já pulsa longe do abrigo. É assim que os perdidos acham a volta.",
                 "Deixei uma trilha em cada raiz. Agora também se vê a mata daqui."),
-    "Coruja": ("Ouvi a madeira fechar muito antes do raio. Julguei que fosse só o vento.",
-               "Ouvi a madeira fechar muito antes do raio. Julguei que fosse só o vento.",
-               "Consigo ouvir as bordas outra vez. Que a luz chegue também a elas."),
+    "Coruja": ("Antes do raio, toquei o sino quando a água deixou a borda. Do tronco só veio silêncio.",
+               "Bati o sino antes do raio, quando a água deixou a borda. Quando o raio me feriu, as batidas pareciam vir de todo lado. Você respondeu nos três ninhos. Falta devolver as gotas à última raiz.",
+               "Agora escuto as quatro correntes. Quando o sino tocar, vou ficar junto à margem. Quero ouvir quem vem de longe."),
 }
 
 
@@ -310,6 +317,11 @@ def terrenos(indice, flags):
             add(x, y, 80, 15, "apoio")
     if indice == 3 and "contrapeso" in flags:
         add(1214, CHAO, 182, 16, "ponte")
+        if aula_sino.PASSARELA in flags:
+            add(2573, CHAO, 367, 16, "grade")
+        else:
+            # A raiz suspensa direciona a ida pelo piso baixo.
+            add(2866, 0, 32, 473, "parede")
     for x,y,w,h,tipo in RAMAIS[indice].pecas:
         if tipo=="comporta":
             if fase.preparo in flags:

@@ -7,7 +7,8 @@ PASTA=Path(__file__).resolve().parents[1]/"assets"/"sons"
 # Os sinais de perigo, dano e mecanismo têm canais distintos para não se encobrirem.
 ALIASES={"etapa":"abertura","selo":"seiva","chefe_exposto":"vulneravel","chefe_acerto":"acerto",
          "chefe_vencido":"vencer","chefe_resolvido":"vencer","investida":"deslize","parede":"impacto","brasa":"seiva",
-         "vulneravel":"vulneravel","exposto":"vulneravel","madeira":"impacto","barril":"valvula",'sacrificio':'dano'}
+         "vulneravel":"vulneravel","exposto":"vulneravel","madeira":"impacto","barril":"valvula",
+         'sacrificio':'dano', 'rebote_casulo':'corda'}
 ALERTAS={"aviso":5,"dano":6,"acerto":7,"sino":8,"impacto":9,"vulneravel":8,
          "raiz":9,"porta":8,"seiva":8,'casco_muda':5,'coruja_muda':5}
 PRESENCA = {"asa_perto", "patas_perto", "sopro_perto", "zurro_perto", "casco_perto", "silvo_perto"}
@@ -78,7 +79,7 @@ class Audio:
         except (pygame.error,OSError):
             pass
 
-    def tocar(self,nome):
+    def tocar(self,nome,*,aviso_de_chefe=False):
         if not self.disponivel or self.mudo: return
         nome=ALIASES.get(nome,nome)
         som=self.fx.get(nome)
@@ -87,13 +88,13 @@ class Audio:
                 som=self.fx.get("passo_folha",som)
             self.passo_alterno=not self.passo_alterno
         if not som: return
-        n=ALERTAS.get(nome)
+        n=ALERTAS['aviso'] if aviso_de_chefe else ALERTAS.get(nome)
         canal=pygame.mixer.Channel(n) if n is not None else next((pygame.mixer.Channel(i) for i in range(16,28) if not pygame.mixer.Channel(i).get_busy()),None)
         if not canal: return
         volume=self.volume_efeitos*(.32 if nome=="passo" else (.50 if nome in ("clique","navegar") else .82))
         canal.set_volume(volume)
         canal.play(som)
-        if nome in ("aviso","sino","dano"): self.silencio=.47
+        if aviso_de_chefe or nome in ("aviso","sino","dano"): self.silencio=.47
 
     def tocar_local(self, nome, fonte_x, ouvinte_x):
         if not self.disponivel or self.mudo:

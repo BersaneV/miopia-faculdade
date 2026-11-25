@@ -34,11 +34,11 @@ ENSAIOS = (
     Ensaio("Asa Fendida",0,(ARENA-20,CHAO),("meio","marco","peca",FASES[0].preparo),
            "Entre pela direita. Observe a altura da asa antes de escolher entre agachar e saltar. A raiz riscada expõe o dorso."),
     Ensaio("Tecelã do Vão",1,(ARENA-20,CHAO),("meio","marco","dreno","lingueta","ponte",FASES[1].preparo),
-           "Entre pela direita. Observe as duas trajetórias de seda depois do primeiro corte. A roda a oeste abre a cortina de água."),
+           "Use E na roda a oeste para derrubar a Tecelã. As marcas mostram de quais casulos vêm reforços. A cortina também interrompe as crias próximas."),
     Ensaio("Raízes do Córrego",1,(2600,CHAO),("meio","dreno","lingueta","ponte","ralo"),
-           "S + Espaço na grade desce sem trocar de mapa. Explore até a membrana de libélula e suba pelos galhos a leste."),
-    Ensaio("Patrulha em dupla",0,(1510,CHAO),(),
-           "Morcego e aranha usam vinte sequências por espécie. Q/F usa ferramentas; o pólen retarda asas e o tanino rompe carapaça."),
+           "S + Espaço desce pelas grades. A aranha investiga onde Lume pousou. Pegue a membrana e suba pelos galhos a leste."),
+    Ensaio("Patrulha em dupla",0,(1510,CHAO),("inimigo_1595",),
+           "Morcego pressiona, aranha flanqueia. V troca de arma. Ctrl + J interrompe a preparação. Q/F usa pólen, que retarda asas e desfaz projéteis à frente."),
     Ensaio('Casco Oco',2,(ARENA-20,CHAO),('meio','marco','no','brasa','vagem'),
            'Salte o chifre, saia da aterrissagem e observe o segundo aviso na fase II. E empurra a seiva até o aro; E na brasa abre a carapaça.'),
     Ensaio('A Coruja',3,(ARENA-20,CHAO),('meio','marco','roldana','contrapeso','eco_antigo'),
@@ -52,19 +52,28 @@ ENSAIOS = (
     Ensaio('Resgate no berçário',0,(1635,1282),('pino_ninho','porta_ninho','caruncho_vencido'),
            'E conversa com Tila. Leia as páginas e escolha entre marcar a trilha com luz ou preparar um pavio único. Esc deixa a escolha para depois.'),
     Ensaio('Jardim do Último Sinal',1,(2510,790),(),
-           'Os três sobreviventes abriram a estufa. Suba aos galhos, busque orvalho, mova o contrapeso e recupere as sementes. A grade desce às calhas; cipós retornam sem portal.'),
+           'Fale com Tila na ponte. Busque o orvalho na copa. A grade da estufa leva à calha de Bento.'),
     Ensaio('Último chamado',3,(ARENA+75,CHAO),('meio','marco','roldana','contrapeso','eco_antigo'),
-           'Última fase isolada: E recolhe uma gota por ninho, K devolve o sinal. Cruze a arena entre os três ninhos, saltando os rasantes anunciados.'),
+           'E recolhe orvalho e K responde no ninho ativo. Leia a altura dos rasantes. Nas faixas verticais, saia da mira das penas.'),
     Ensaio('Floresta reacesa',0,(450,CHAO),(),
-           'Pós-jogo isolado. Explore as luzes locais dos sobreviventes e use M: a cartografia continua exigindo visão real. O save da História é preservado.'),
+           'Atravesse a ponte de Véspera e fale com Tila na forquilha. M → Missões e pedidos acompanha a amarra. Vá ao Córrego para visitar Bento.'),
     Ensaio('Escuta dos ataques',0,(160,CHAO),(),
            'J escolhe a família; K escolhe a espécie; E toca o aviso à direita. Trinta avisos próprios. Compare por ouvido antes de avaliar no combate.'),
-    Ensaio('Clareira da Vigília',0,(1450,CHAO),('meio','valvula','peca'),
-           'Três guardas combinam pressão, flanco e cobertura. J/L alternam golpes; Ctrl carrega luz. K cega no escuro. Após vencer, E recolhe o núcleo e E na tocha acende a clareira.'),
+    Ensaio('Clareira da Vigília',0,(1510,CHAO),('meio','valvula','peca'),
+           'No escuro, os guardas cercam e revezam golpes. K clareia e cega por instantes. Na luz, dois podem atacar juntos. Após vencer, E recolhe o núcleo e E na tocha acende a clareira.'),
     Ensaio('Globos e tochas',0,(1700,1282),('pino_ninho','porta_ninho','caruncho_vencido'),
            'Recolha núcleo e globo com E. Vá à tocha à direita e use E: a região ficará clara. Q escolhe globo; F fixa outra luz permanente no local. Os ensaios preservam a História.'),
     Ensaio('Combos da colônia',0,(160,CHAO),(),
            'J/J/J, J/L/J, K/L. Ctrl + J ou L dobra o dano e gasta brilho, depois vida se faltar. Acertos recuperam brilho; dano zera o multiplicador. E no abrigo repõe alvos.'),
+    Ensaio("Beiral do Taquaral",2,(263,CHAO),(),
+           "Salte nas sementes que sobem. Segure Espaço ao cair; saia pela esquerda para pousar no alto. Na descida à direita, solte e retome Espaço sob a aba."),
+    Ensaio("Galeria das Sementes",2,(2180,CHAO),("no","meio","brasa","inimigo_1980"),
+           "E lê a placa de Risca. Use S + Espaço nos patamares. O cipó sempre permite voltar."),
+    Ensaio("O sino soterrado",3,(2530,237),("meio","roldana","contrapeso"),
+           "Desça pelas duas grades com S + Espaço. E toca o sino. Suba pelos degraus da direita para baixar a passarela."),
+    Ensaio("Nicho dos Berços",2,(1700,968),("no","meio","brasa","inimigo_1980","cavilha_sementes",
+           "veneziana_sementes_aberta","inimigo_1910","inimigo_2087"),
+           "Erga a tranca com E. Salte o bote e ataque a brecha. Ctrl + J atravessa as escamas e K desfaz o veneno próximo. V troca de arma."),
     Ensaio("Duelo da aranha",0,ABRIGO,(),
            "Referência S02 de fio e salto, com replay. Os vinte combos novos estão em Patrulha em dupla e na História. E recupera luz no abrigo."),
 )
@@ -99,7 +108,7 @@ def preparar_ensaio(indice, dificuldade, semente=SEMENTE_ARANHA):
     elif cena.nome=='Último chamado':
         from .chefes import Encontro
         from .ultimo_chamado import iniciar
-        jogo.boss=Encontro(3,ARENA,CHAO,despertar=True,aliados=3)
+        jogo.boss=Encontro(3,ARENA,CHAO,despertar=True,aliados=3,dificuldade=dificuldade)
         iniciar(jogo.boss,jogo.eventos)
     elif cena.nome=='Floresta reacesa':
         jogo.concluida=True
@@ -109,7 +118,12 @@ def preparar_ensaio(indice, dificuldade, semente=SEMENTE_ARANHA):
     if cena.nome=="Patrulha em dupla":
         jogo.ensaio_tatico=True
         jogo.bolsa.receber("polen",2)
-        jogo.bolsa.receber("tanino",2)
+        jogo.bolsa.receber("pavio",1)
+    if cena.nome=="Nicho dos Berços":
+        jogo.bolsa.receber("polen",2)
+        jogo.bolsa.receber("casulo",1)
+    if cena.nome in ("Patrulha em dupla", "Nicho dos Berços"):
+        jogo.ensaio_troca_arma = True
     if cena.nome in ('Raízes do Bosque','Caruncho do Viveiro'):
         jogo.missao='pedido_raizes'
         jogo.bolsa.receber('balsamo',1)

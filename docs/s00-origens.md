@@ -4,6 +4,26 @@
 
 ## Materiais que chegaram à versão atual
 
+**S35.** A tranca, a parede de colmos, o cofre e a lâmpada do Nicho
+dos Berços são desenho procedural de `src/arte_galeria.py`. A Cobra
+reusa o desenho procedural e os sons de cobra do jogo, com silhueta
+maior e uma segunda trajetória. Registro S35.
+
+**S34.** As faixas de aviso, formas das penas e símbolos dos ninhos
+são desenho procedural de `src/arte_arena.py`. Os sons e retratos
+da Coruja vêm do acervo local. Registro S34.
+
+**S33.** A meada de Tila, a régua de Bento e os brotos junto de Aru
+são desenhos procedurais novos em `src/arte_resgates.py`. As poses de
+vaga-lume e os sons são do acervo da equipe. Registro S33.
+
+**S32.** Os entalhes, berços, corda, água, casulos e sinais da ninhada
+são desenhos procedurais novos da equipe em `src/corrego_historia.py`
+e `src/arte_arena.py`, sem arquivos externos incorporados. As crias
+reutilizam as poses de aranha e os efeitos sonoros do acervo local,
+sujeitos aos registros já associados a esses arquivos. As fontes
+consultadas orientam desenho narrativo e ritmo. Registro S32.
+
 | Identificador | Evidência e uso atual | Alternativa se faltar autorização | Quem revisa e como conferir |
 |---|---|---|---|
 | A3-TEXTO | O `src/ambiental.py` da entrega A3 e o atual são idênticos, inclusive a cópia no pacote. `src/main.py` consulta `MENSAGENS` ao concluir cada raiz e `src/telas.py` exibe o registro. O uso chega à tela, além do código distribuído. | A equipe de narrativa escreve quatro registros novos a partir de observações ecológicas verificáveis. Como ponto de partida, o jogador pode inferir onde a umidade voltou observando a mudança nas folhas antes de ler a pergunta. Escrever novas perguntas, alternativas e explicações, com autoria registrada. | Roteirista proposto e coautores da base. Fazer uma passagem pelas quatro raízes e pelo diário, verificar alternativas, conclusão e reabertura do save. Comparar os textos efetivamente exibidos com os aprovados. |
@@ -48,3 +68,24 @@ O produtor reúne os seis colaboradores creditados e identifica quem efetivament
 | Pendências e retorno | Registrar a decisão por canal, quem a deu, data e evidência. Se houver dúvida, marcar pendência, responsável, alternativa e próxima revisão. Se uma substituição for escolhida, conferir também capturas, textos de loja e arquivos da instalação. |
 
 Na aba **Direitos**, levar somente o ID da evidência e o resultado que a equipe realmente confirmou. Contratos, assinaturas, dados bancários, documentos pessoais e tratativas comerciais ficam no arquivo privado. Esta triagem fornece a evidência técnica para **T00.4**. A decisão humana de **T00.3** fica em aberto.
+
+## Beiral do Taquaral, S29
+
+As sementes são formas desenhadas em tempo real no código de Miopia,
+sem arquivo de arte de terceiros. A aba reutiliza `assets/arte/beiral_2.png`
+(REF07); o prêmio usa `assets/arte/item_pavio.png` e o efeito de coleta
+do acervo atual. Nenhuma licença externa foi incorporada nesta rodada.
+
+## Galeria das Sementes, S30
+
+Os colmos, a placa, a cavilha, os berços, a veneziana e os efeitos de
+vento usam desenho do projeto em código. Chão, raízes de fundo e
+criaturas usam os materiais presentes na edição S29. A vespa reaproveita
+seus dois quadros e recebe postura procedural ao pousar. Os sons de
+ferrão, aranha, roda, madeira e coleta vêm do acervo do Miopia.
+
+## História das quatro raízes, S31
+
+Prólogo, transições, falas e resumo da viagem foram escritos para o
+Miopia. A linha do sino e a marca são desenhadas em código. Os fundos,
+o ícone e o áudio do sino foram reutilizados do acervo instalado.

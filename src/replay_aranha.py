@@ -32,7 +32,8 @@ class HistoricoCheio(OSError):
 def assinatura():
     """A identidade das regras independe das opções de som e do desenho da sala."""
     digest = hashlib.sha256()
-    for nome in ("ensaios", "sala_aranha", "travessia", "combate", "fases", "visao", "narrativa", "subsolo", "descoberta", "missoes", "taticas", "ferramentas",'recursos','raizes_bosque','resgates','jardim','ultimo_chamado','marcas_mapa','luzes_mundo','encontros','tutorial','sinalizacao'):
+    for nome in ("ensaios", "sala_aranha", "travessia", "combate", "fases", "visao", "narrativa", "subsolo", "descoberta", "missoes", "taticas", "ferramentas",'recursos','raizes_bosque','resgates','jardim','ultimo_chamado','marcas_mapa','luzes_mundo','encontros','tutorial','sinalizacao','arquivo_casca','fio_corte','fauna_jardim','vento_taquaral','galeria_taquaral','aula_sino',
+                 "corrego_historia", "rotas_borda", "corte_vertical", "chefes", "casco", "coruja", "ninhada", "nicho_taquaral"):
         digest.update(nome.encode("ascii"))
         digest.update(Path(__file__).with_name(nome + ".py").read_bytes())
     return digest.hexdigest()

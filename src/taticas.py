@@ -40,8 +40,13 @@ RECEITAS=(
 
 
 class Habitante(Inimigo):
+    def __init__(self, tipo, x, y, dificuldade="normal", *, semente=None, ouve_pousos=False):
+        self.ouve_pousos = ouve_pousos
+        super().__init__(tipo, x, y, dificuldade, semente=semente)
+
     def repor(self):
         super().repor()
+        self.alvo_escuta = None
         self.plano=[]
         self.combo_id=-1
         self.memoria_combos=[]
@@ -49,6 +54,7 @@ class Habitante(Inimigo):
         self.familia_atual=0
         self.companhia=None
         self.grupo=None;self.papel='';self.colegas=[];self.cego=0.
+        self.ataque_iluminado = False
         self.pos_manobra=Vetor(self.rect.center)
 
     def viavel(self,indice,lume,terrenos):
@@ -89,19 +95,28 @@ class Habitante(Inimigo):
             if peso>0 and sorteio<0:return ident
         return max(i for i,p in enumerate(pesos) if p>0)
 
+    @property
+    def duracao_aviso(self):
+        return max(.36, self.ficha.aviso/self.ritmo*.88)
+
+    def vaga_de_ataque(self):
+        ativos = [e for e in self.colegas if e is not self and e.ativo and e.estado in ("aviso", "investida")]
+        if len(ativos) != 1:
+            return not ativos
+        outro = ativos[0]
+        return (self.ataque_iluminado and outro.ataque_iluminado
+                and (outro.estado != "aviso" or outro.t <= outro.duracao_aviso-.18))
+
     def preparar(self,lume,terrenos=()):
         if self.cego>0:self.t=.12;return ''
-        if self.grupo:
-            ativos=[e for e in self.colegas if e is not self and e.ativo and e.estado in ('aviso','investida')]
-            if len(ativos)>=2 or any(e.estado=='aviso' and e.t>max(.36,e.ficha.aviso/e.ritmo*.88)-.18 for e in ativos):
-                self.t=.12;return ''
         if not self.plano:
             self.combo_id=self.escolher_combo(lume,terrenos)
             if self.combo_id<0:self.t=.18;return ""
             self.memoria_combos=(self.memoria_combos+[self.combo_id])[-3:]
             self.plano=list(RECEITAS[self.combo_id].passos)
-        passo=self.plano.pop(0)
+        passo=self.plano[0]
         if isinstance(passo,str):
+            self.plano.pop(0)
             lado=1 if lume.rect.centerx>=self.rect.centerx else -1
             alvo=lume.rect.centerx+lado*90 if passo=="flanco" else self.rect.centerx-lado*115
             self.pos_manobra=Vetor(max(25,self.origem[0]-280,min(self.origem[0]+280,alvo)),self.origem[1]-self.rect.h/2)
@@ -109,6 +124,10 @@ class Habitante(Inimigo):
             return "patas_perto" if self.tipo=="aranha" else self.ficha.som
         if not self.viavel(passo,lume,terrenos):
             self.plano=[];self.t=.18;return ""
+        if self.grupo and not self.vaga_de_ataque():
+            self.t = .12
+            return ""
+        self.plano.pop(0)
         self.familia_atual=passo
         acao=FAMILIAS[self.tipo][passo];self.acao_atual=acao
         self.tecnica={"eco":"eco","orbe":"eco","veneno":"ferrao","leque_fio":"fio","leque_ferrao":"ferrao",
@@ -123,7 +142,7 @@ class Habitante(Inimigo):
         if self.tecnica=="rasante":self.alvo.y=lume.rect.bottom-(9 if acao=="rasante_baixo" else 42)
         if self.tecnica=="fenda":self.alvo.y=self.origem[1]
         self.estado="aviso"
-        self.t=max(.36,self.ficha.aviso/self.ritmo*.88)
+        self.t = self.duracao_aviso
         return f'aviso_{self.tipo}_{passo}'
 
     def lancar(self):
@@ -150,7 +169,46 @@ class Habitante(Inimigo):
             return contato
         return super().executar_ataque(dt,lume,terrenos)
 
+    def ouvir_pouso(self, posicao):
+        """Fixa uma pista no chão. Outro ruído não redireciona a busca atual."""
+        if not self.ouve_pousos or self.estado != "patrulha":
+            return False
+        x, piso = posicao
+        if abs(piso - self.origem[1]) > 24 or abs(x - self.rect.centerx) > 300:
+            return False
+        self.alvo_escuta = x
+        self.plano.clear()
+        self.chamada = 2.6
+        self.estado, self.t = "investigar", 2.4
+        return True
+
+    def alcance(self, lume, raio, restaurado):
+        if self.ouve_pousos:
+            return min(154., 86. + .28 * raio)
+        return super().alcance(lume, raio, restaurado)
+
+    def encerrar_busca(self):
+        self.alvo_escuta = None
+        self.estado, self.t = "patrulha", .14
+
     def update(self,dt,lume,raio,restaurado,terrenos):
+        if self.estado == "investigar":
+            centro = self.rect.center
+            if (self.cego <= 0 and math.dist(centro, lume.rect.center) < self.alcance(lume, raio, restaurado)
+                    and not segmento_bloqueado(centro, lume.rect.center, terrenos)):
+                self.encerrar_busca()
+            else:
+                velocidade = 145 * (.6 if self.lentidao > 0 else 1)
+                sons, dano = super().update(dt, lume, raio, restaurado, terrenos)
+                destino = (self.alvo_escuta, self.origem[1]-self.rect.h/2)
+                if abs(destino[0] - self.rect.centerx) > 5:
+                    self.frente = 1 if destino[0] > self.rect.centerx else -1
+                    self.seguir(destino, velocidade, dt, terrenos)
+                else:
+                    self.t = min(self.t, .44)
+                if self.t <= 0:
+                    self.encerrar_busca()
+                return sons, dano
         if self.estado=="manobra":
             self.cego=max(0.,self.cego-dt)
             self.relogio+=dt;self.t-=dt
@@ -174,12 +232,20 @@ class Habitante(Inimigo):
             deslocamento=-lado*85 if self.papel=='flanco' else lado*(170 if self.papel=='cobertura' else 75)
             destino=Vetor(lume.rect.centerx+deslocamento,self.origem[1]-self.rect.h/2)
             self.seguir(destino,195,dt,terrenos)
-        else:super().patrulhar(lume,distancia,dt,terrenos)
+        else:
+            # A aranha do Córrego mantém a ronda até ouvir ou avistar Lume.
+            super().patrulhar(lume, math.inf if self.ouve_pousos else distancia, dt, terrenos)
 
     def acertar(self,arma,area,clarao,lume):
         antes,tempo=self.estado,self.t
         resultado=super().acertar(arma,area,clarao,lume)
+        if antes == "investigar" and (self.estado != antes or not self.ativo):
+            self.alvo_escuta = None
         if resultado=="acerto" and self.ativo:
+            if self.grupo and self.grupo != "ninhada" and antes == "aviso" and arma.luminoso and not clarao:
+                self.estado, self.t = "atordoado", .32
+                self.plano.clear()
+                return resultado
             if self.grupo and antes in ('aviso','investida'):
                 self.estado,self.t=antes,tempo
                 return resultado

@@ -9,22 +9,23 @@ if __package__ in ("",None):
 os.environ.setdefault("SDL_RENDER_SCALE_QUALITY","1")
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT","1")
 import pygame
-from src import telas, ambiental, mapa_visor
+from src import telas, ambiental, mapa_visor, tutorial
 from src.audio import Audio
+from src.controles import ACOES, EVENTOS_PAD, PADRAO, Controles, Gamepad
 from src.ensaios import ENSAIOS, INDICE_ARANHA, SEMENTE_ARANHA, preparar_ensaio
-from src.ilustracao import fonte, original, tinta, linhas
+from src.ilustracao import estilo, fonte, original, tinta, linhas
 from src.memoria import Memoria
 from src.paisagem import Paisagem, hud
 from src.replay_aranha import GravacaoAranha, HistoricoCheio, gravar_tentativa, iterar_reproducao, ler_tentativa
-from src.roteiro import PROLOGO
-from src.travessia import Comando, Jornada
+from src.roteiro import EFEITOS_RAIZ, PROLOGO
+from src.travessia import Comando, DIFICULDADES, Jornada
 
 ACEITAR = (pygame.K_RETURN,pygame.K_KP_ENTER,pygame.K_SPACE)
 CORES_AUDIO = ("bosque","corrego","taquaral","gruta")
 PAUSA_NO_ACERTO=.022
 
 class App:
-    pausa_nomes=["Continuar","Diário","Ajustes","Reiniciar no marco","Salvar e voltar ao menu"]
+    pausa_nomes=["Continuar","Diário","Ajustes","Voltar ao marco","Salvar e voltar ao menu"]
     def __init__(self, temporaria=False, pasta_ensaios=None):
         pygame.mixer.pre_init(44100,-16,2,512)
         pygame.init()
@@ -35,6 +36,10 @@ class App:
         pygame.display.set_caption("Miopia · A última luz da mata")
         pygame.display.set_icon(original("lume_4.png"))
         self.mem=Memoria(temporaria)
+        self.controles = Controles(self.mem.prefs["teclas"])
+        self.gamepad = Gamepad()
+        self.capturando_tecla = False
+        self.aviso_tecla = ""
         self.audio=Audio()
         self.ajustar_som()
         self.credito_audio=("Vento, água, taquaras e ecos sintetizados para Miopia. Seis espécies e os guardiões têm avisos próprios, posicionados em estéreo conforme a distância e o lado de Lume.")
@@ -75,6 +80,7 @@ class App:
         self.passo_som=0.
         self.ultimo_save=None
         self.proximo_save=0.
+        self.resultados_pendentes = []
         self.mem_camp=self.mem.ler("campanha")
         self.conf_acao=self.conf_msg=self.conf_titulo=self.confirmacao=""
         self.registro_etapa=0
@@ -107,11 +113,13 @@ class App:
         self.selecao=0
         self.alvos=[]
         self.bordas.clear()
+        self.gamepad.limpar()
 
     def menu(self):
         self.fechar_tentativa("menu")
         self.reproducao=None
         self.salvar_campanha()
+        self.resultados_pendentes.clear()
         self.jogo=None
         self.ensaio=None
         self.mem_camp=self.mem.ler("campanha")
@@ -202,23 +210,33 @@ class App:
 
     def salvar_campanha(self,forcar=True):
         j=self.jogo
-        if self.ensaio is not None or not j or j.modo!="historia" or j.estado not in ("jogando","caido","vitoria"): return
+        if self.ensaio is not None or not j or j.modo!="historia" or j.estado not in ("jogando","caido","vitoria","derrota"): return
         if not forcar and self.relogio<self.proximo_save:return
         self.proximo_save=self.relogio+.65
         assinatura=(j.etapa,j.pontuacao,j.lume.vidas,round(j.lume.energia),round(j.lume.vida),j.checkpoint,len(j.diario),
-                    tuple(sorted(j.flags)),j.bolsa.revisao,j.em_vertical,j.marco_vertical,frozenset(j.cartografia),frozenset(j.explorado),j.missao,
+                    tuple(sorted(j.flags)),j.bolsa.revisao,j.lume.arma.equipamento,j.em_vertical,j.marco_vertical,frozenset(j.cartografia),frozenset(j.explorado),j.missao,
                     j.concluida,tuple((k,v['oficio'],v['premio']) for k,v in sorted(j.sobreviventes.items())),
-                    tuple((m['celula'],m['tipo']) for m in j.marcas))
-        assinatura+=(tuple((g['regiao'],g['x'],g['y']) for g in j.globos),frozenset(j.tochas),frozenset(j.nucleos),frozenset(j.tutorial))
-        if forcar or assinatura!=self.ultimo_save:
-            self.mem_camp=j.salvar()
-            self.mem.guardar("campanha",self.mem_camp)
-            self.ultimo_save=assinatura
-            self.proximo_save=self.relogio+.65
+                    tuple((m['celula'],m['tipo']) for m in j.marcas),j.dificuldade,j.dificuldade_pendente)
+        assinatura+=(tuple((g['regiao'],g['x'],g['y']) for g in j.globos),frozenset(j.tochas),frozenset(j.nucleos),frozenset(j.tutorial),
+                     frozenset(j.pisadas_escuta))
+        if forcar or self.resultados_pendentes or assinatura != self.ultimo_save:
+            dados = j.salvar()
+            if j.estado == "derrota":
+                dados["vidas"] = j.fagulhas_para_nova_tentativa
+            if self.mem.guardar_campanha(dados, self.resultados_pendentes):
+                self.mem_camp = dados
+                self.resultados_pendentes.clear()
+                self.ultimo_save = assinatura
+
+    def registrar_resultado(self):
+        j = self.jogo
+        self.resultados_pendentes.append((j.modo, j.estado, j.volta*4+j.etapa+1, j.pontuacao, j.tempo))
+        self.salvar_campanha()
 
     def iniciar(self,modo,continuar=False):
         self.fechar_tentativa("menu")
         self.ensaio=None
+        self.resultados_pendentes.clear()
         if continuar:
             try: self.jogo=Jornada.carregar(self.mem_camp)
             except (ValueError,KeyError,TypeError,AttributeError,OverflowError):
@@ -249,8 +267,12 @@ class App:
         if self.estado=='prologo':self.fala_paginas=[msg]
         else:
             escolha=self.jogo and self.jogo.escolha_resgate is not None
+            if escolha:
+                oficio=self.jogo.sobreviventes[self.jogo.escolha_resgate]['oficio']
+                self.selecao=int(oficio=='abrigo')
             x=179 if self.jogo and self.jogo.dialogo and self.jogo.dialogo[0] in telas.NPC_TAM else 97
-            partes=linhas(msg,760 if escolha else 825-x,17)
+            with estilo(self.mem.prefs, self.controles):
+                partes=linhas(self.controles.dicas(msg),760 if escolha else 825-x,17)
             tamanho=4 if escolha else 3
             self.fala_paginas=[' '.join(partes[i:i+tamanho]) for i in range(0,len(partes),tamanho)] or ['']
         self.fala=self.fala_paginas[0]
@@ -296,14 +318,37 @@ class App:
         self.conf_titulo,self.conf_msg,self.conf_acao=titulo,msg,acao
         self.mudar("confirmar")
 
+    @property
+    def ajustes_da_historia(self):
+        return self.anterior == "pausa" and self.ensaio is None and self.jogo is not None
+
+    @property
+    def dificuldade_escolhida(self):
+        if self.ajustes_da_historia:
+            return self.jogo.dificuldade_pendente or self.jogo.dificuldade
+        return self.mem.prefs["dificuldade"]
+
     def ajustar(self,delta):
-        if self.selecao==5:
+        if self.selecao in (5,6,7):
+            if self.selecao == 5:
+                self.aviso_tecla = ""
+                self.mudar("controles")
+                return
+            if self.selecao == 6:
+                self.mudar("acessibilidade")
+                return
             self.mudar(self.anterior)
             return
         p=self.mem.prefs
         if self.selecao==0:
-            niveis=("fácil","normal","difícil")
-            p["dificuldade"]=niveis[(niveis.index(p["dificuldade"])+delta)%3]
+            escolha = DIFICULDADES[(DIFICULDADES.index(self.dificuldade_escolhida)+delta) % len(DIFICULDADES)]
+            if self.ajustes_da_historia:
+                j = self.jogo
+                j.dificuldade_pendente = escolha if escolha != j.dificuldade else None
+                self.salvar_campanha()
+                self.som("clique")
+                return
+            p["dificuldade"] = escolha
         elif self.selecao in (1,2):
             k=("musica","efeitos")[self.selecao-1]
             p[k]=max(0,min(1,round(p[k]+delta*.1,2)))
@@ -312,6 +357,20 @@ class App:
             self.paisagem.brilho_mata=p["brilho"]
         else: p["mudo"]=not p["mudo"]
         self.ajustar_som()
+        self.mem.guardar("preferencias",p)
+        self.som("clique")
+
+    def ajustar_acessibilidade(self, delta):
+        p = self.mem.prefs
+        if self.selecao == 0:
+            escalas = (100, 115, 125)
+            p["texto"] = escalas[(escalas.index(p["texto"])+delta) % len(escalas)]
+        elif self.selecao == 3:
+            self.mudar("ajustes")
+            return
+        else:
+            chave = ("contraste", "claroes_suaves")[self.selecao-1]
+            p[chave] = not p[chave]
         self.mem.guardar("preferencias",p)
         self.som("clique")
 
@@ -357,10 +416,12 @@ class App:
                 if self.ensaio is not None:
                     self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
                 else:
-                    if self.jogo.estado=="derrota":
-                        self.jogo.lume.vidas=self.jogo.vidas_iniciais
+                    esgotou = self.jogo.estado == "derrota"
+                    if esgotou:
                         self.jogo.estado="caido"
                     self.jogo.reiniciar()
+                    if esgotou:
+                        self.jogo.lume.vidas=self.jogo.vidas_iniciais
                     self.salvar_campanha()
                     self.jogar()
             elif self.ensaio is not None: self.voltar_aos_ensaios()
@@ -371,9 +432,21 @@ class App:
             elif self.ensaio is not None:
                 self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
             else:
-                self.jogo.reiniciar()
+                self.jogo.reiniciar(recuperar=False)
+                self.salvar_campanha()
                 self.jogar()
         elif estado=="ajustes": self.ajustar(1)
+        elif estado=="controles":
+            if i < len(ACOES):
+                self.capturando_tecla = True
+                self.aviso_tecla = "Pressione a nova tecla. Esc cancela."
+            elif i == len(ACOES):
+                self.controles.restaurar()
+                self.mem.guardar("preferencias",self.mem.prefs)
+                self.aviso_tecla = "Teclas padrão restauradas."
+            else:
+                self.mudar("ajustes")
+        elif estado=="acessibilidade": self.ajustar_acessibilidade(1)
         elif estado=="fim":
             if self.ensaio==INDICE_ARANHA:
                 if i==0: self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
@@ -381,7 +454,13 @@ class App:
             elif i==0 and self.jogo.estado=='vitoria' and self.jogo.modo=='historia':
                 self.jogo.estado='jogando'
                 self.salvar_campanha();self.jogar()
-                self.jogo.notificar('A floresta continua aberta. M acompanha os resgates e pedidos que faltam.',7.)
+                if len(self.jogo.sobreviventes) < 3:
+                    aviso = "A floresta está reacesa. M aponta o próximo sinal dos sobreviventes."
+                elif "jardim_plantado" not in self.jogo.cartografia:
+                    aviso = "Os três voltaram. M indica o caminho até o Jardim do Último Sinal."
+                else:
+                    aviso = "O Jardim recebeu água. As trilhas da floresta continuam abertas."
+                self.jogo.notificar(aviso, 7.)
             elif i==0 and self.jogo.estado=="derrota":
                 self.iniciar(self.jogo.modo,self.jogo.modo=="historia" and bool(self.mem_camp))
             else: self.menu()
@@ -397,9 +476,12 @@ class App:
         elif self.ensaio is not None:
             self.confirmar("ensaio","Repetir o ensaio?","Lume, os inimigos e os itens voltam ao estado inicial deste ensaio.","Repetir o ensaio")
         else:
-            self.confirmar("marco","Voltar ao marco?","Lume recupera a luz. As portas abertas, as gotas e os registros continuam na jornada.","Voltar ao marco")
+            self.confirmar("marco", "Voltar ao marco?",
+                           "Lume mantém vida, brilho, fagulhas e itens. Os inimigos ainda vivos se recompõem.",
+                           "Voltar ao marco")
 
     def abrir_diario(self,origem):
+        tutorial.confirmar(self.jogo,'mapa')
         self.anterior=origem
         self.pagina=0
         from .missoes import conhecidas, rastreada
@@ -420,9 +502,42 @@ class App:
         if e.type==pygame.QUIT:
             self.rodando=False
             return
-        if e.type==pygame.WINDOWFOCUSLOST and self.estado=="jogo" and not self.jogo.dialogo:
-            self.mudar("pausa")
+        if e.type==pygame.WINDOWFOCUSLOST:
+            self.gamepad.limpar()
+            self.bordas.clear()
+            if self.estado=="jogo" and not self.jogo.dialogo:
+                self.mudar("pausa")
             return
+        if e.type in EVENTOS_PAD:
+            codigo = self.gamepad.evento(e)
+            if e.type == pygame.CONTROLLERDEVICEREMOVED:
+                self.bordas.clear()
+                self.controles.ultimo_pad = bool(self.gamepad.dispositivos)
+            if codigo is not None:
+                self.controles.ultimo_pad = True
+                codigo = self.tecla_do_pad(codigo, e)
+                if codigo is not None:
+                    self.evento(pygame.event.Event(pygame.KEYDOWN, key=codigo, do_pad=True))
+            return
+        if e.type == pygame.KEYDOWN and self.capturando_tecla and not getattr(e,"repeat",False):
+            if e.key == pygame.K_ESCAPE:
+                self.capturando_tecla = False
+                self.aviso_tecla = ""
+            elif not getattr(e,"do_pad",False):
+                acao = tuple(ACOES)[self.selecao]
+                self.aviso_tecla = self.controles.trocar(acao, e.key)
+                if not self.aviso_tecla:
+                    self.capturando_tecla = False
+                    self.mem.guardar("preferencias",self.mem.prefs)
+            return
+        if self.capturando_tecla:
+            return
+        if e.type == pygame.KEYDOWN and not getattr(e,"repeat",False) and self.estado=="diario":
+            pad = getattr(e,"do_pad",False)
+            if (pad and e.key==pygame.K_m) or (not pad and e.key in self.controles.codigos("mapa")):
+                self.controles.ultimo_pad = pad
+                self.mudar(self.anterior)
+                return
         if mapa_visor.evento(self,e):return
         if e.type in (pygame.MOUSEMOTION,pygame.MOUSEBUTTONDOWN):
             if e.type==pygame.MOUSEBUTTONDOWN and e.button!=1: return
@@ -445,6 +560,9 @@ class App:
             return
         if e.type!=pygame.KEYDOWN or getattr(e,"repeat",False): return
         k=e.key
+        pad = getattr(e,"do_pad",False)
+        if not pad:
+            self.controles.ultimo_pad = False
         if k==pygame.K_F11:
             self.cheia=not self.cheia
             self.tela=self.janela()
@@ -466,25 +584,31 @@ class App:
             if k==pygame.K_ESCAPE: self.jogar()
             elif k in ACEITAR: self.avancar_fala()
         elif est=="jogo":
+            tecla = k if pad else PADRAO.get(self.controles.indice.get(k))
             if self.jogo.dialogo:
                 if self.jogo.escolha_resgate is not None and k==pygame.K_ESCAPE:
                     self.jogo.fechar_dialogo();self.alvos=[]
                 elif self.jogo.escolha_resgate is not None and k in (pygame.K_UP,pygame.K_DOWN):
                     self.selecao=(self.selecao+1)%2
-                elif k in (*ACEITAR,pygame.K_e,pygame.K_ESCAPE): self.avancar_fala()
+                elif k in (*ACEITAR,pygame.K_ESCAPE) or tecla == pygame.K_e: self.avancar_fala()
             elif k in (pygame.K_ESCAPE,pygame.K_p): self.mudar("pausa")
-            elif k in (pygame.K_TAB,pygame.K_m): self.abrir_diario("jogo")
-            elif k==pygame.K_c and self.jogo.modo=='historia':self.abrir_caderno()
-            elif k==pygame.K_v and getattr(self.jogo,'ensaio_armas',False):
-                if self.jogo.trocar_arma(): self.som('pagina')
-            elif k==pygame.K_q:
+            elif tecla==pygame.K_m: self.abrir_diario("jogo")
+            elif (tecla==pygame.K_c or pad and k==pygame.K_UP) and self.jogo.modo=='historia':self.abrir_caderno()
+            elif tecla==pygame.K_v and self.jogo.agulha_disponivel:
+                if self.jogo.trocar_arma():
+                    tutorial.confirmar(self.jogo,'agulha')
+                    self.som('pagina')
+                    self.salvar_campanha()
+            elif tecla==pygame.K_q:
                 if self.gravacao: self.gravacao.acao(self.jogo,"trocar_item")
                 else: self.jogo.trocar_item()
                 self.som("pagina")
-            elif k==pygame.K_f:
+            elif tecla==pygame.K_f:
                 resultado=self.gravacao.acao(self.jogo,"usar_item") if self.gravacao else self.jogo.usar_item()
+                if resultado:
+                    tutorial.confirmar(self.jogo,'bolsa')
                 self.som(resultado or "navegar")
-            else: self.bordas.add(k)
+            elif tecla is not None: self.bordas.add(tecla)
         elif est=="diario":
             if self.pagina==1:
                 from .missoes import conhecidas, selecionar
@@ -502,9 +626,10 @@ class App:
                 self.jogo.missao="secundaria" if self.jogo.missao=="principal" else "principal"
                 self.jogo.notificar("Rastreando missão "+self.jogo.missao)
                 return
-            if k in (pygame.K_ESCAPE,pygame.K_TAB,pygame.K_m): self.mudar(self.anterior)
+            if k==pygame.K_ESCAPE:
+                self.mudar(self.anterior)
             elif k in (pygame.K_LEFT,pygame.K_RIGHT,pygame.K_a,pygame.K_d):
-                self.pagina=(self.pagina+(-1 if k in (pygame.K_LEFT,pygame.K_a) else 1))%(len(self.jogo.diario)+2+bool(self.jogo.cartografia))
+                self.pagina=(self.pagina+(-1 if k in (pygame.K_LEFT,pygame.K_a) else 1))%telas.paginas_diario(self)
                 self.mapa_visor.arrastando=False
                 self.som("pagina")
         elif est=="pausa" and k in (pygame.K_ESCAPE,pygame.K_p): self.jogar()
@@ -518,18 +643,40 @@ class App:
         elif k==pygame.K_ESCAPE:
             if est in ("registro","capitulo"): self.jogar()
             elif est=="ajustes": self.mudar(self.anterior)
+            elif est in ("controles","acessibilidade"): self.mudar("ajustes")
             elif est=="confirmar": self.mudar("menu" if self.confirmacao=="nova" else "pausa")
             elif est=="morte": return
             elif est=="menu": self.rodando=False
             else: self.menu()
         elif est=="ajustes" and k in (pygame.K_LEFT,pygame.K_RIGHT): self.ajustar(1 if k==pygame.K_RIGHT else -1)
+        elif est=="acessibilidade" and k in (pygame.K_LEFT,pygame.K_RIGHT): self.ajustar_acessibilidade(1 if k==pygame.K_RIGHT else -1)
         elif k in ACEITAR: self.ativar()
         elif k in (pygame.K_UP,pygame.K_DOWN,pygame.K_w,pygame.K_s):
-            quant={"menu":len(self.menu_nomes()),"pausa":5,"ajustes":6,"confirmar":2,"morte":2,"ensaios":len(ENSAIOS)+1,
+            quant={"menu":len(self.menu_nomes()),"pausa":5,"ajustes":8,"controles":len(ACOES)+2,"acessibilidade":4,
+                   "confirmar":2,"morte":2,"ensaios":len(ENSAIOS)+1,
                    "fim":len(self.fim_nomes()) if est=="fim" else 0,"registro":3}.get(est,0)
             if quant:
                 self.selecao=(self.selecao+(-1 if k in (pygame.K_UP,pygame.K_w) else 1))%quant
                 self.som("navegar")
+
+    def tecla_do_pad(self, codigo, evento):
+        if self.estado == "jogo" and not self.jogo.dialogo:
+            if codigo == pygame.K_UP and evento.type == pygame.CONTROLLERAXISMOTION:
+                return None
+            return {pygame.K_LEFT:pygame.K_a, pygame.K_RIGHT:pygame.K_d}.get(codigo,codigo)
+        if self.estado == "diario":
+            if evento.type == pygame.CONTROLLERAXISMOTION and self.pagina != 1:
+                return {pygame.K_LEFT:pygame.K_a, pygame.K_RIGHT:pygame.K_d,
+                        pygame.K_UP:pygame.K_w, pygame.K_DOWN:pygame.K_s}.get(codigo)
+            especiais = {pygame.K_k:pygame.K_EQUALS, pygame.K_LCTRL:pygame.K_MINUS,
+                         pygame.K_v:pygame.K_c, pygame.K_m:pygame.K_m}
+            if codigo in especiais:
+                return especiais[codigo]
+        confirmar = pygame.K_SPACE if self.estado == "replay" else pygame.K_RETURN
+        return {pygame.K_SPACE:confirmar, pygame.K_LSHIFT:pygame.K_ESCAPE,
+                pygame.K_e:pygame.K_RETURN, pygame.K_LEFT:pygame.K_LEFT, pygame.K_RIGHT:pygame.K_RIGHT,
+                pygame.K_UP:pygame.K_UP, pygame.K_DOWN:pygame.K_DOWN, pygame.K_ESCAPE:pygame.K_ESCAPE,
+                pygame.K_j:pygame.K_r if self.estado=="pausa" else None}.get(codigo)
 
     def ajustar_semente(self,delta):
         self.semente_aranha=(self.semente_aranha+delta)%1000000
@@ -550,18 +697,20 @@ class App:
             return
         if self.estado=="jogo" and not self.jogo.dialogo:
             teclas=pygame.key.get_pressed() if presso is None else presso
-            mover=int(bool(teclas[pygame.K_RIGHT] or teclas[pygame.K_d]))-int(bool(teclas[pygame.K_LEFT] or teclas[pygame.K_a]))
-            shift=(pygame.K_LSHIFT,pygame.K_RSHIFT)
-            direcoes=(pygame.K_LEFT,pygame.K_RIGHT,pygame.K_a,pygame.K_d)
-            pedir_deslize=bool(self.bordas.intersection(shift)) or (
-                any(teclas[k] for k in shift) and bool(self.bordas.intersection(direcoes)))
-            cmd=Comando(mover,teclas[pygame.K_s] or teclas[pygame.K_DOWN],pygame.K_SPACE in self.bordas,
-                        teclas[pygame.K_SPACE],pedir_deslize,
+            controle=self.gamepad.seguras
+            def segura(acao, alternativa=None):
+                return (PADRAO[acao] in controle or alternativa in controle
+                        or any(teclas[k] for k in self.controles.codigos(acao)))
+            mover=int(segura("direita",pygame.K_RIGHT))-int(segura("esquerda",pygame.K_LEFT))
+            pedir_deslize=pygame.K_LSHIFT in self.bordas or (
+                segura("deslize") and bool(self.bordas.intersection((pygame.K_a,pygame.K_d))))
+            cmd=Comando(mover,segura("baixo",pygame.K_DOWN),pygame.K_SPACE in self.bordas,
+                        segura("salto"),pedir_deslize,
                         pygame.K_j in self.bordas,pygame.K_k in self.bordas,pygame.K_e in self.bordas,
-                        pygame.K_l in self.bordas,bool(teclas[pygame.K_LCTRL] or teclas[pygame.K_RCTRL]))
+                        pygame.K_l in self.bordas,segura("carga"))
             self.bordas.clear()
             j=self.jogo
-            etapa,raizes=j.etapa,j.restauradas
+            etapa,raizes,dificuldade=j.etapa,j.restauradas,j.dificuldade
             if self.gravacao: self.gravacao.avancar(j,dt,cmd)
             else: j.update(dt,cmd)
             self.marcar_impacto(j)
@@ -571,19 +720,14 @@ class App:
                 self.fechar_tentativa("morte")
                 self.morte_desde=self.relogio
                 if j.estado=="derrota" and self.ensaio is None:
-                    self.mem.terminar(j)
-                    if j.modo=="historia":
-                        self.mem_camp=j.salvar()
-                        self.mem_camp["vidas"]=j.vidas_iniciais
-                        self.mem.guardar("campanha",self.mem_camp)
+                    self.registrar_resultado()
                 else: self.salvar_campanha()
                 self.mudar("morte")
                 self.musica("derrota")
             elif j.estado!="jogando":
                 self.fechar_tentativa(j.estado)
                 if self.ensaio is None:
-                    self.mem.terminar(j)
-                    self.salvar_campanha()
+                    self.registrar_resultado()
                 self.mudar("fim")
                 self.musica(j.estado)
             elif raizes<j.restauradas and j.modo=="historia":
@@ -591,13 +735,13 @@ class App:
                 m=ambiental.MENSAGENS[j.etapa]
                 j.memorizar(m["fase"],m["mensagem"])
                 self.resposta=None
-                j.notificar('Raiz restaurada. C abre o caderno opcional; a trilha continua à direita.',6.)
+                j.notificar(EFEITOS_RAIZ[j.etapa] + ' C abre o registro da raiz.', 6.)
                 self.salvar_campanha()
             elif j.etapa!=etapa:
                 self.musica(CORES_AUDIO[j.etapa])
                 if j.modo=="historia": self.mudar("capitulo")
                 self.salvar_campanha()
-            else: self.salvar_campanha(False)
+            else: self.salvar_campanha(j.dificuldade != dificuldade)
         self.mix(dt)
 
     def marcar_impacto(self,j):
@@ -608,8 +752,9 @@ class App:
         for ev in dict.fromkeys(j.eventos):
             if ev=="aviso" and j.boss:
                 ev=j.boss.som_aviso
-                if self.audio.tocar_local(ev,j.boss.x,j.lume.rect.centerx):
-                    continue
+                if not self.audio.tocar_local(ev,j.boss.x,j.lume.rect.centerx):
+                    self.audio.tocar(ev,aviso_de_chefe=True)
+                continue
             self.som(ev)
         for nome,x in j.sons_espaciais:
             self.audio.tocar_local(nome,x,j.lume.rect.centerx)
@@ -640,6 +785,10 @@ class App:
         self.audio.atualizar(dt)
 
     def desenhar(self):
+        with estilo(self.mem.prefs, self.controles):
+            self.desenhar_tela()
+
+    def desenhar_tela(self):
         s=self.tela
         if self.estado in ("jogo","pausa","morte","replay"):
             j=self.jogo
@@ -654,7 +803,8 @@ class App:
             return
         renderer={"menu":telas.menu,"prologo":telas.cena,"ajuda":telas.ajuda,"creditos":telas.creditos,
                   "ensaios":telas.ensaios,"confirmar":telas.confirmar,"ajustes":telas.opcoes_ajustes,"capitulo":telas.capitulo,
-                  "registro":telas.registro,"fim":telas.fim,"recordes":telas.recordes,"diario":telas.diario}
+                  "registro":telas.registro,"fim":telas.fim,"recordes":telas.recordes,"diario":telas.diario,
+                  "controles":telas.remapeamento,"acessibilidade":telas.acessibilidade}
         renderer[self.estado](self,s)
 
     def rodar(self):

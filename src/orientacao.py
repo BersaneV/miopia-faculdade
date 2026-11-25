@@ -70,7 +70,7 @@ PISTAS = {
     "contrapeso": ("Contrapeso do sino", "Suba a corda e solte o contrapeso",
         "Use E na base da corda para subir. O contrapeso está no estrado alto à direita. Soltá-lo sustenta a ponte sobre o vão."),
     "eco_antigo": ("Sino soterrado", "Desça e toque o sino da câmara",
-        "Depois do marco, suba os três apoios até a grade. S + Espaço desce à câmara. Use E no sino para abrir a folha de casca à direita."),
+        "Depois do marco, suba aos apoios. S + Espaço desce pela grade. Use E no sino e observe para onde o toque corre."),
 }
 
 
@@ -100,6 +100,10 @@ def _mecanismo(j, ident):
 
 
 def _superficie(j):
+    from .aula_sino import orientar as orientar_escuta
+    trecho = orientar_escuta(j)
+    if trecho is not None:
+        return trecho
     # Um save antigo com o chefe vencido já comprova o percurso anterior.
     if "chefe" not in j.flags:
         for flag, _ in j.fase.passos:
@@ -114,7 +118,7 @@ def _superficie(j):
             return _alvo(j, "chefe", nome, j.boss.dica, j.boss.x, j.boss.y,
                          "Observe o aviso do ataque e use a ferramenta da arena. " + j.boss.dica)
         return _alvo(j, "arena", "Entrada da arena", "Avance até a guardiã", ARENA + 60, CHAO,
-                     "Os mecanismos abriram a porteira. Descanse no marco antes de entrar na arena à direita.")
+                     "Os mecanismos abriram a porteira. Guarde seu retorno no marco antes de entrar na arena à direita.")
     if "raiz" not in j.flags:
         if j.orvalhos < 3:
             gotas = [o for o in j.objetos if o.tipo == "orvalho"]
@@ -130,6 +134,7 @@ def _superficie(j):
 
 
 def _corte(j):
+    from . import arquivo_casca as arquivo
     from . import corte_vertical as c
     setor, _ = c.setor(j.lume.rect.centery, j.lume.rect.centerx)
     def ponto(ident, nome, acao, detalhe):
@@ -141,6 +146,15 @@ def _corte(j):
     if setor == "arquivo" and not j.bolsa.estoque["espinho"]:
         return ponto("reliquia_espinho", "Espinho de acácia", "Desvio · recolha o espinho de acácia",
                      "À direita do armário, no mesmo patamar, use E no espinho. Ele reforça os cortes permanentemente. Depois, suba à galeria pelo lado direito.")
+    if setor == 'arquivo' and arquivo.CONFIRMADOS not in j.cartografia:
+        fechada = arquivo.FECHADA in j.cartografia
+        if fechada and arquivo.LIDOS not in j.cartografia:
+            return _alvo(j, 'sinais_arquivo', 'Traços do Arquivo', 'Leia os traços na parede',
+                         arquivo.SINAIS[0], arquivo.PISO, 'Use E nos traços que aparecem à direita da janela.', opcional=True)
+        x = min(arquivo.PUXADORES, key=lambda x: abs(x-j.lume.rect.centerx))
+        acao = 'Reabra a veneziana' if fechada else 'Feche a veneziana'
+        return _alvo(j, 'veneziana', 'Veneziana do Arquivo', acao, x, arquivo.PISO,
+                     'E aciona um puxador ao lado da janela. Repare no que muda na parede.', opcional=True)
     if (setor == "viveiro" and j.lume.rect.bottom <= 1370
             and not j.bolsa.estoque["resina"]):
         return ponto("reliquia_resina", "Resina de âmbar", "Desvio · recolha a resina dos berços",
@@ -175,7 +189,14 @@ def _corte(j):
 
 def _subsolo(j):
     """Dentro do desvio, a pista termina numa abertura física da superfície."""
-    if not j.bolsa.estoque["asa"]:
+    from .rotas_borda import POSTOS
+    trabalho = POSTOS["bento"]
+    voltando = j.missao == "borda_bento" or j.bolsa.estoque["asa"]
+    if voltando and trabalho.corda.id in j.flags and j.lume.rect.bottom >= 1000:
+        corda = trabalho.corda
+        return _alvo(j, corda.id, "Corda de Bento", corda.nome, corda.x, corda.y,
+                     "Use E na base da corda sob a grade da direita. Ela sobe até a margem.", opcional=True)
+    if not voltando:
         return _alvo(j, "reliquia_asa", "Membrana de libélula",
                      "Desvio · encontre a membrana entre as raízes", 2940, 1102,
                      "Desça pelos galhos com S + Espaço. No chão, à direita, recolha a membrana com E para ganhar velocidade. O retorno sobe pelo outro lado.",
@@ -189,6 +210,19 @@ def _subsolo(j):
 def objetivo_atual(j):
     if hasattr(j, "sala_id"):
         return None
+    if j.boss and j.boss.coro_iniciado and not j.boss.vencido:
+        from .ultimo_chamado import alvo as ninho_atual
+        x, _ = ninho_atual(j.boss)
+        sinal = j.boss.coro_sinais
+        detalhe = 'Use K perto do ninho para devolver o sinal.'
+        if j.boss.coro_gota:
+            detalhe += ' Use E no ninho para recolher orvalho e repor brilho.'
+        return _alvo(j, f'ninho_chamado_{sinal}', 'Ninho do Último Chamado',
+                     f'Devolva o sinal {sinal+1}/3 no ninho', x, j.boss.chao, detalhe)
+    from .fio_corte import orientar as orientar_fio
+    fio = orientar_fio(j)
+    if fio is not None:
+        return fio
     from .resgates import orientar as orientar_resgates
     resgate=orientar_resgates(j)
     if resgate is not None:return resgate
@@ -202,6 +236,10 @@ def objetivo_atual(j):
     from .raizes_bosque import orientar
     raizes=orientar(j)
     if raizes is not None:return raizes
+    from .galeria_taquaral import orientar as orientar_galeria
+    galeria = orientar_galeria(j)
+    if galeria is not None:
+        return galeria
     if getattr(j,'ensaio_armas',False):
         return _alvo(j,'oficina','Alvos de casca','Compare as duas armas',520,CHAO,
                      'V troca fora do golpe. E no abrigo repõe luz e alvos; este ensaio não altera a História.',opcional=True)

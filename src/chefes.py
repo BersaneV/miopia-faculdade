@@ -1,7 +1,7 @@
 """Encontros laterais. Toda geometria de combate usa coordenadas do mundo."""
 from dataclasses import dataclass
 from functools import lru_cache
-from math import hypot, sin
+from math import ceil, hypot, sin
 from pathlib import Path
 
 import pygame
@@ -14,6 +14,19 @@ class Ficha:
     pista: str
     janela: str
     desfecho: str
+
+
+@dataclass(frozen=True)
+class Ritmo:
+    criticos: int
+    janela: float
+    dano_comum: float
+    recuperacao: float
+
+
+SERENO = Ritmo(2, 1., 1., 1.)
+NORMAL = Ritmo(3, .86, .58, .85)
+DIFICIL = Ritmo(3, .72, .44, .72)
 
 
 FICHAS = (
@@ -72,10 +85,13 @@ def _quadros(nome):
 
 class Encontro:
     """Um encontro novo restaura a geometria e todos os objetos essenciais."""
-    meta = 2
-
-    def __init__(self, indice: int, inicio: int, chao: int, largura: int = 760, *, despertar=False, aliados=0):
+    def __init__(self, indice: int, inicio: int, chao: int, largura: int = 760, *,
+                 despertar=False, aliados=0, dificuldade="normal"):
         self.indice, self.inicio, self.chao, self.largura = indice, inicio, chao, largura
+        self.dificuldade = dificuldade
+        self.ritmo = (SERENO if dificuldade in ("fácil", "facil", "sereno") else
+                      DIFICIL if dificuldade in ("difícil", "dificil") else NORMAL)
+        self.meta = self.ritmo.criticos
         self.despertar=despertar and indice==3
         self.aliados=max(0,min(3,aliados));self.coro_iniciado=False
         self.ficha = FICHAS[indice]
@@ -106,8 +122,11 @@ class Encontro:
         self.engatado = self.assentado = self.tabua_quebrada = False
         self.sino_movido = self.sino_soou = False
         self.x_ouvido = None
+        self.ninhada = None
         if indice == 1:
             self.x, self.y = self.cortina, chao-203.
+            from .ninhada import Ninhada
+            self.ninhada = Ninhada(self)
         if indice == 2:
             self.x, self.y = self.inicio + largura * .77, chao-35.
             from .casco import iniciar
@@ -138,8 +157,14 @@ class Encontro:
     def dica(self):
         if self.vencido:
             return self.ficha.desfecho
+        if self.estado == "chama_ninhada":
+            return "Os casulos se abrem nas marcas. A cortina freia as crias próximas."
         if self.estado.startswith('coro_'):
-            return f'Último chamado: {self.coro_sinais}/3 sinais. K junto ao ninho marcado; E recolhe uma gota para esse sinal.'
+            if self.coro_faixas:
+                return 'Saia das faixas das penas.'
+            if self.estado in ('coro_aviso', 'coro_investida'):
+                return 'Leia a altura da linha e desvie do rasante.'
+            return 'E recolhe orvalho · K responde no ninho marcado'
         if self.estado == "aberto":
             return self.ficha.janela
         if self.indice == 0 and self.estado in ("aviso", "investida"):
@@ -175,7 +200,10 @@ class Encontro:
 
     @property
     def som_aviso(self):
-        if self.estado.startswith('coro_'):return 'coruja_eco'
+        if self.estado == "chama_ninhada":
+            return "teia"
+        if self.estado.startswith('coro_'):
+            return 'coruja_penas' if self.coro_faixas else 'coruja_eco'
         if self.indice == 2:
             return {'salto': 'casco_salto', 'varrida': 'casco_chifre'}.get(self.tecnica, 'casco_avanco')
         if self.indice == 3:
@@ -252,7 +280,7 @@ class Encontro:
     def _abrir(self, duracao, eventos):
         for nome in ('ondas', 'penas'):
             getattr(self, nome, []).clear()
-        self._mudar("aberto", duracao)
+        self._mudar("aberto", duracao * self.ritmo.janela)
         self.onda = .7
         eventos.append("impacto")
 
@@ -281,12 +309,12 @@ class Encontro:
         self.sino_soou = False
         self.engatado = self.assentado = False
         self.barrel_x = self.inicio + 102
-        self._mudar("busca", .55 if self.indice in (2, 3) else 1.6)
+        self._mudar("busca", (.55 if self.indice in (2, 3) else 1.6) * self.ritmo.recuperacao)
 
     def _atualizar_aberto(self, corpo, golpe, clarao, eventos, permitir=True):
         if permitir and self._acertou(corpo, golpe, clarao):
             self.progresso += 1
-            self.vida = max(0.,self.vida-50.)
+            self.vida = max(0., self.vida - ceil(self.vida_max/self.meta))
             self.onda = 1.
             eventos.append("acerto")
             if self.vida <= 0:
@@ -307,6 +335,8 @@ class Encontro:
             iniciar(self,eventos)
             return
         self.vencido=True;self.estado='repouso'
+        if self.ninhada is not None:
+            self.ninhada.limpar()
         eventos.append('chefe_resolvido')
 
     def _aviso_investida(self, destino, y, duracao, impacta, eventos):
@@ -326,12 +356,12 @@ class Encontro:
         if abs(self.x-self.destino) < .01:
             if self.impacta:
                 self.y = self.chao - (57 if self.indice == 0 else 72)
-                janela = 7.1
+                janela = 2.8
                 if self.indice == 0:
                     janela = 2.1 if self.progresso else 3.8
                 self._abrir(janela, eventos)
             else:
-                self._mudar("busca", .95)
+                self._mudar("busca", .95*self.ritmo.recuperacao)
 
     def _asa_altura_da_mira(self, corpo):
         apoio = next((a for a in self.apoios()
@@ -382,6 +412,8 @@ class Encontro:
         if self.agua > 0 and (self.estado == "aviso" or self.fios):
             self.fios.clear()
             self._mudar("desce", 1.0)
+        if self.ninhada.atualizar(corpo, eventos):
+            return
         if self.estado == "desce":
             self.x = aproximar(self.x, self.cortina, dt*260)
             self.y = aproximar(self.y, self.chao-31, dt*215)
@@ -392,7 +424,8 @@ class Encontro:
         if self.estado == "busca":
             self.y = aproximar(self.y, self.chao-208, dt*172)
             self.x = aproximar(self.x, self.cortina+sin(self.relogio*.8)*65, dt*125)
-            if self.tempo <= 0:
+            if (self.tempo <= 0 and not self.fios and not self.ninhada.atacando()
+                    and not self.ninhada.ceder_turno(corpo)):
                 self.destino = corpo.centerx
                 self.alvo_y = corpo.centery
                 self.frente = 1 if self.destino > self.x else -1
@@ -413,7 +446,7 @@ class Encontro:
                 n = max(1., hypot(vx, vy))
                 self.fios.append(Fio(self.x, self.y, vx*265/n, vy*265/n))
             self.turno += 1
-            self._mudar("busca", .98)
+            self._mudar("busca", .98*self.ritmo.recuperacao)
             eventos.append("teia")
         vivos = []
         for fio in self.fios:
@@ -472,7 +505,8 @@ class Encontro:
                 self.ultimo_corte=serie
                 self.ultimo_golpe_t=self.relogio
             if not fraco:
-                dano=(7.,3.,0.,4.)[self.indice] if pulso_perto else dano_corte*bonus_dano
+                base = (7.,3.,0.,4.)[self.indice] if pulso_perto else dano_corte*bonus_dano
+                dano = base*self.ritmo.dano_comum
                 self.vida=max(0.,self.vida-dano)
                 eventos.append("acerto" if dano else "bloqueio")
                 if self.vida<=0:

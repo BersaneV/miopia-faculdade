@@ -12,10 +12,11 @@ def descidas(j):
         yield r
 
 
-def camera_vertical(j,altura,dt=None):
+def camera_vertical(j,altura,dt=None,*,enquadrar=False):
     l=j.lume.rect
-    abertura=any(r.left-24<=l.centerx<=r.right+24 and abs(l.bottom-r.top)<65 for r in descidas(j))
-    alvo=max(0.,min(altura-540.,l.centery-300.)) if abertura or l.bottom>474 else 0.
+    acompanhar = enquadrar or l.bottom > 474 or any(
+        r.left-24 <= l.centerx <= r.right+24 and abs(l.bottom-r.top) < 65 for r in descidas(j))
+    alvo = max(0., min(altura-540., l.centery-300.)) if acompanhar else 0.
     if dt is None:j.camera_y=alvo
     else:j.camera_y+=(alvo-j.camera_y)*(1.-math.exp(-8.5*dt))
 

@@ -2,6 +2,7 @@
 import math
 import pygame
 from .ilustracao import AMBAR,OSSO,brilho
+from .fauna_jardim import FLOR, PLACA
 
 
 def objeto(s,o,j,cx):
@@ -26,6 +27,11 @@ def objeto(s,o,j,cx):
     elif i=='jardim_memoria':
         pygame.draw.polygon(s,(139,152,100),[(x-16,y-25),(x+19,y-22),(x+13,y-3),(x-17,y-7)])
         for n in range(3):pygame.draw.line(s,(70,94,62),(x-9,y-20+n*5),(x+8,y-17+n*5),1)
+    elif i == PLACA:
+        pygame.draw.line(s,(104,92,64),(x,y),(x-3,y-38),4)
+        pygame.draw.polygon(s,(83,71,53),[(x-20,y-39),(x+15,y-41),(x+20,y-22),(x-16,y-21)])
+        pygame.draw.line(s,AMBAR,(x-10,y-34),(x-3,y-28),2)
+        pygame.draw.lines(s,OSSO,False,[(x-7,y-26),(x,y-30),(x+8,y-25),(x+13,y-29)],1)
     elif i=='jardim_entrada':
         pygame.draw.line(s,(105,123,79),(x,y),(x,y-58),4)
         for n in range(3):
@@ -61,6 +67,15 @@ def detalhes(s,j,cx):
         for n in (-1,0,1):
             px=x-cx+n*30
             pygame.draw.arc(s,(106,120,75),(px-15,y-35,30,34),0,math.pi,2)
+    x, y = FLOR[0]-cx, FLOR[1]
+    if -45 < x < 1005 and 'jardim_aberto' in j.cartografia:
+        pygame.draw.lines(s,(111,130,81),False,[(x-5,y+32),(x+4,y+18),(x,y+3)],4)
+        for face in (-1,1):
+            pygame.draw.polygon(s,(98,123,73),[(x,y+22),(x+face*19,y+14),(x+face*24,y+17),(x,y+29)])
+            pygame.draw.lines(s,(194,162,112),False,[(x,y+4),(x+face*14,y-9),(x+face*18,y-2),(x+face*11,y+6)],3)
+        pygame.draw.ellipse(s,(160,111,77),(x-10,y-2,20,9))
+        pygame.draw.circle(s,AMBAR,(x,y+1),3)
+        brilho(s,(x,y+1),18)
     if 'jardim_calha' in j.cartografia:
         for n in range(6):
             yy=1480+n*5

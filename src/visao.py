@@ -24,10 +24,23 @@ class Vestigio:
         return round(ALCANCE * (1. - u*u*(3.-2.*u)))
 
 
-def fontes(j):
+def fontes(j, *, vestigios=True):
+    from .aula_sino import luzes as luz_do_sino
     from .resgates import fontes as fontes_vivas
     from .luzes_mundo import fontes as globos
-    luzes=[(*j.lume.rect.center,j.raio),*((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios),*fontes_vivas(j),*globos(j)]
+    luzes=[(*j.lume.rect.center,j.raio)]
+    if vestigios:
+        luzes.extend((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios)
+    luzes.extend(fontes_vivas(j))
+    luzes.extend(globos(j))
+    luzes.extend(luz_do_sino(j))
+    if j.em_vertical:
+        from .arquivo_casca import luzes as luzes_arquivo
+        from .fauna_jardim import luzes as luzes_nectar
+        from .fio_corte import luzes as luzes_fio
+        luzes.extend(luzes_arquivo(j))
+        luzes.extend(luzes_nectar(j))
+        luzes.extend(luzes_fio(j))
     if j.boss and j.boss.estado.startswith('coro_'):
         from .ultimo_chamado import alvo
         luzes.append((*alvo(j.boss),70))
