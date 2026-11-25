@@ -39,10 +39,10 @@ def janela(j,compacto):
     return pygame.Rect(x,y,largura,altura)
 
 
-def mapa_local(s,j,rect,compacto=False):
+def mapa_local(s,j,rect,compacto=False,*,janela_mundo=None):
     """A planta usa os sólidos reais, inclusive grades e o novo subsolo contínuo."""
     r=pygame.Rect(rect)
-    mundo=janela(j,compacto)
+    mundo=janela(j,compacto) if janela_mundo is None else pygame.FRect(janela_mundo)
     sx,sy=r.w/mundo.w,r.h/mundo.h
     def ponto(x,y):
         return round(r.x+(x-mundo.x)*sx),round(r.y+(y-mundo.y)*sy)
@@ -54,8 +54,6 @@ def mapa_local(s,j,rect,compacto=False):
     for tr in j.solidos:
         if tr.tipo=="arena" or not tr.rect.colliderect(mundo):
             continue
-        if j.em_vertical and "viu_"+setor(tr.rect.centery,tr.rect.centerx)[0] not in j.cartografia:
-            continue
         x,y=ponto(tr.rect.left,tr.rect.top)
         w,h=max(1,round(tr.rect.w*sx)),max(1,round(tr.rect.h*sy))
         cor=(69,95,81) if tr.atravessavel else (45,62,52)
@@ -63,16 +61,16 @@ def mapa_local(s,j,rect,compacto=False):
         pygame.draw.line(s,(126,154,125) if tr.descida else (88,119,102),(x,y),(x+w,y),1)
     cam=pygame.Rect(round(r.x+(j.camera-mundo.x)*sx),
                     round(r.y+(j.camera_y-mundo.y)*sy),round(960*sx),round(540*sy))
-    pygame.draw.rect(s,(64,81,77),cam,1)
+    if not getattr(j,'_mapa_sem_lume',False):pygame.draw.rect(s,(64,81,77),cam,1)
     for o in j.objetos:
-        if o.tipo not in ("refugio","marco","fenda","passagem","valvula","saida","voltar"):
+        if o.tipo not in ("refugio","marco","fenda","passagem","valvula","saida","voltar",'lanterna'):
             continue
         if not mundo.collidepoint(o.x,o.y-8):
             continue
-        if j.em_vertical and "viu_"+setor(o.y,o.x)[0] not in j.cartografia:
-            continue
         px,py=ponto(o.x,o.y-12)
-        if o.tipo in ('refugio','marco'):
+        if o.tipo=='lanterna':
+            pygame.draw.circle(s,AMBAR,(px,py),4,1)
+        elif o.tipo in ('refugio','marco'):
             pygame.draw.circle(s,PALIDO,(px,py),2 if compacto else 4,1)
         elif o.tipo=="valvula":
             pygame.draw.circle(s,(94,143,139),(px,py),1 if compacto else 3)
@@ -82,13 +80,14 @@ def mapa_local(s,j,rect,compacto=False):
     from .descoberta import conhecida, TAMANHO
     # Apaga somente trechos ainda não percorridos, inclusive partes de uma
     # plataforma longa que continua para dentro de uma sala desconhecida.
-    for gx in range(mundo.left//TAMANHO,(mundo.right-1)//TAMANHO+1):
-        for gy in range(mundo.top//TAMANHO,(mundo.bottom-1)//TAMANHO+1):
+    largura,altura=dimensoes(j)
+    for gx in range(max(0,math.floor(mundo.left/TAMANHO)),min(math.ceil(largura/TAMANHO),math.ceil(mundo.right/TAMANHO))):
+        for gy in range(max(0,math.floor(mundo.top/TAMANHO)),min(math.ceil(altura/TAMANHO),math.ceil(mundo.bottom/TAMANHO))):
             if not conhecida(j,gx*TAMANHO,gy*TAMANHO):
                 x,y=ponto(gx*TAMANHO,gy*TAMANHO)
                 x2,y2=ponto((gx+1)*TAMANHO,(gy+1)*TAMANHO)
                 pygame.draw.rect(s,(12,22,24),(x,y,x2-x+1,y2-y+1))
-    if alvo and conhecida(j,alvo.x,alvo.y-20):
+    if alvo and mundo.collidepoint(alvo.x,alvo.y-20) and conhecida(j,alvo.x,alvo.y-20):
         px,py=ponto(alvo.x,alvo.y-20)
         px=max(r.left+6,min(r.right-7,px))
         py=max(r.top+6,min(r.bottom-7,py))
@@ -107,8 +106,16 @@ def mapa_local(s,j,rect,compacto=False):
         if ativo(j):
             from .arte_raizes import nomes_mapa
             nomes_mapa(s,j,r,ponto,conhecida)
-    px,py=ponto(*j.lume.rect.center)
-    losango(s,px,py,4 if compacto else 6,AMBAR)
+    from .marcas_mapa import desenhar as desenhar_marcas
+    from .luzes_mundo import fontes as globos
+    for x,y,raio in globos(j):
+        if mundo.collidepoint(x,y) and conhecida(j,x,y):
+            px,py=ponto(x,y);pygame.draw.circle(s,AMBAR,(px,py),4,1)
+            pygame.draw.circle(s,TEAL,(px,py),1)
+    desenhar_marcas(s,j,ponto,mundo)
+    if not getattr(j,'_mapa_sem_lume',False):
+        px,py=ponto(*j.lume.rect.center)
+        if r.collidepoint(px,py):losango(s,px,py,4 if compacto else 6,AMBAR)
     s.set_clip(clip)
     pygame.draw.rect(s,(62,85,80),r,1)
 

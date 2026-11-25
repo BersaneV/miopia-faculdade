@@ -84,7 +84,7 @@ def ajuda(a,s):
     livro(a,s,"Controles","CADERNO DE CAMPO")
     for i,(key,acao) in enumerate(CONTROLES):
         texto(s,key,86,130+i*25,16,AMBAR,"forte")
-        texto(s,acao,302,130+i*25,16,OSSO)
+        texto(s,acao,302,130+i*25,14,OSSO)
     texto(s,"Esc ou Enter   ·   voltar",84,461,15,PALIDO)
 
 
@@ -148,7 +148,8 @@ def morte(a,s):
     if terminal and j.modo=="historia":
         detalhe=FINAL["derrota"][1]
     else:
-        detalhe=("Lume caiu no vão." if j.motivo_morte=="queda" else "A luz de Lume se apagou.")
+        detalhe=('A habilidade consumiu a última vida de Lume.' if j.motivo_morte=='sacrificio' else
+                 'Lume caiu no vão.' if j.motivo_morte=='queda' else 'A vida de Lume se esgotou.')
         detalhe += (" Resta uma fagulha." if j.lume.vidas==1 else
                     f" Restam {j.lume.vidas} fagulhas." if j.lume.vidas else " A última fagulha se apagou.")
     paragrafo(s,detalhe,212,222,536,18,PALIDO)
@@ -233,43 +234,47 @@ def diario(a,s):
     total=len(j.diario)+2+tem_corte
     texto(s,f"{a.pagina+1} / {total}",873,77,20,PALIDO,"titulo","right")
     if a.pagina==0:
-        from .cartografia import alvo_local, mapa_local, texto_curto
-        texto(s,"Corte da Figueira" if j.em_vertical else j.fase.name,85,135,23,AMBAR,"titulo")
-        texto(s,"Âmbar · Lume     Alvo verde · próximo passo     Círculo · marco",85,168,14,PALIDO)
-        from .missoes import rastreada
-        texto(s,texto_curto("Acompanhando: "+rastreada(j).titulo+" · Direita: lista de pedidos",780,11),85,183,11,AMBAR)
-        mapa_local(s,j,(85,197,780,153))
-        texto(s,f'Bálsamos: {j.bolsa.estoque["balsamo"]}/{j.bolsa.capacidade_balsamo} na bolsa · {j.bolsa.reserva_balsamo} no abrigo',864,352,10,PALIDO,'normal','right')
-        alvo=alvo_local(j)
-        texto(s,texto_curto(j.objetivo,780,17,"forte"),85,362,17,OSSO,"forte")
-        if alvo:
-            texto(s,texto_curto(alvo.motivo,780,14),85,384,14,AMBAR)
-            # O relato completo fica no diário; a faixa ao vivo mantém uma ação.
-            for n,linha in enumerate(linhas(alvo.detalhe,780,14)[:2]):
-                texto(s,linha,85,404+n*17,14,PALIDO)
-        reliquias=getattr(j.bolsa,"reliquias",())
-        if reliquias:
-            bonus=[]
-            if j.bolsa.bonus_dano>1: bonus.append(f"dano +{round((j.bolsa.bonus_dano-1)*100)}%")
-            if j.bolsa.bonus_velocidade>1: bonus.append(f"movimento +{round((j.bolsa.bonus_velocidade-1)*100)}%")
-            if j.bolsa.fator_dreno<1: bonus.append(f"gasto de luz −{round((1-j.bolsa.fator_dreno)*100)}%")
-            if j.bolsa.estoque['frasco']:bonus.append('3 bálsamos na bolsa')
-            if j.bolsa.estoque['lente']:bonus.append('visão +18 px')
-            texto(s,texto_curto("Relíquias ativas · "+" · ".join(bonus),780,12),85,442,12,AMBAR)
-        else:
-            texto(s,"Explore para localizar o alvo. K recupera a nitidez da floresta.",85,442,12,TEAL)
+        pagina_mapa(a,s)
+        return
     
     elif a.pagina==1:
         painel_pedidos(a,s)
     elif a.pagina==2 and tem_corte:
-        from .corte_vertical import desenhar_mapa
-        texto(s,"Corte da Figueira",85,130,25,AMBAR,"titulo")
-        desenhar_mapa(s,j,pygame.Rect(84,173,780,264))
+        pagina_mapa(a,s,corte=True)
+        return
     else:
         nome,msg=j.diario[a.pagina-2-int(tem_corte)]
         texto(s,nome,84,161,30,AMBAR,"titulo")
         paragrafo(s,msg,84,221,750,22)
     texto(s,"Esquerda / direita   mudar página     Tab / Esc   fechar",84,465,15,PALIDO)
+
+
+def pagina_mapa(a,s,corte=False):
+    from .cartografia import alvo_local,mapa_local,texto_curto
+    from .mapa_visor import contexto,QUADRO
+    from .missoes import rastreada
+    j=contexto(a.jogo,corte);v=a.mapa_visor;v.preparar(j)
+    texto(s,'Corte da Figueira' if j.em_vertical else j.fase.name,85,134,23,AMBAR,'titulo')
+    texto(s,texto_curto('Acompanhando: '+rastreada(a.jogo).titulo,620,12),85,165,12,AMBAR)
+    texto(s,'Âmbar · Lume   Verde · objetivo   Círculo · marco',85,182,11,PALIDO)
+    texto(s,f'{v.zoom:.1f}×',864,174,14,AMBAR,'forte','right')
+    v.desenhar(s,j)
+    alvo=alvo_local(j)
+    texto(s,texto_curto(a.jogo.objetivo,780,15,'forte'),85,402,15,OSSO,'forte')
+    detalhe=alvo.detalhe if alvo else 'Explore as trilhas e marque os lugares a que deseja voltar.'
+    if getattr(j,'_mapa_sem_lume',False):detalhe='Consulta do Corte · C centraliza no último marco; Lume está na superfície.'
+    if a.mapa_aviso_ate>a.relogio:detalhe=a.mapa_aviso
+    texto(s,texto_curto(detalhe,780,12),85,423,12,PALIDO)
+    bolsa=a.jogo.bolsa
+    bonus=[f'Bálsamos {bolsa.estoque["balsamo"]}/{bolsa.capacidade_balsamo} · reserva {bolsa.reserva_balsamo}']
+    if bolsa.bonus_dano>1:bonus.append('dano +25%')
+    if bolsa.bonus_velocidade>1:bonus.append('movimento +12%')
+    if bolsa.estoque['resina']:bonus.append('K 18 · golpes luz −20%')
+    if bolsa.estoque['lente']:bonus.append('visão +18 px')
+    texto(s,texto_curto(' · '.join(bonus),780,11),85,442,11,TEAL)
+    texto(s,'+ / − ou roda: zoom · WASD ou arrastar: mover · C: centralizar',85,463,12,PALIDO)
+    from .marcas_mapa import TIPOS,CORES
+    texto(s,f'Direito: marcar/remover · V: {TIPOS[a.mapa_tipo]} · Esq / Dir: páginas · M fecha',85,482,12,CORES[a.mapa_tipo])
 
 
 def painel_pedidos(a,s):

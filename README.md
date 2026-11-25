@@ -28,10 +28,12 @@ Ver a travessia em movimento.
 | S ou seta para baixo | Agachar. Segure para baixo e aperte Espaço sobre grade, galho elevado ou apoio para passar ao nível inferior. Terra e pontes firmes sustentam Lume. |
 | Shift + direção | Deslizar |
 | E | Usar mecanismos, subir cordas, descansar e conversar |
-| J / S + J no ar | Até três cortes em sequência; ataque para baixo com rebote ao acertar. Cortes também interceptam fios e ferrões. |
-| K | Clarão fixo no mundo, ao custo de 22 de luz. |
-| Q / F | Alternar item / usar o item escolhido (bálsamo, pavio, casulo ou concha). |
+| J / L / S + J no ar | Cortes rápidos / pesados / ataque descendente com rebote. J/L/J, K/J e K/L combinam movimentos. Shift+direção+J avança. |
+| Ctrl + J / L | Ataque de luz com dano dobrado: 8/14 de brilho; avanço com Ctrl custa 12. Se faltar, usa vida. |
+| K | Clarão de 520 px por 5,5 s, fixo no mundo: 22 de brilho, ou vida se faltar. No escuro, prejudica brevemente novos ataques dos mobs. |
+| Q / F | Alternar / usar item. Globo fixa luz permanente. Bálsamo recupera até 35 de vida e brilho; pavio prolonga clarão e casulo absorve um golpe. |
 | Tab / M / C | Mapa por descoberta / mapa / caderno opcional das raízes restauradas. No mapa, direita abre pedidos; cima/baixo e Enter escolhem o rastreio. |
+| No mapa: + / −, WASD, C, mouse | Zoom / mover / centralizar / arrastar. Botão direito marca/remove; V troca tipo. Só regiões descobertas aceitam marcas. |
 | P ou Esc | Pausar ou continuar. R na pausa pede confirmação para retornar ao marco. |
 | M / F11 | Silenciar ou reativar som / alternar tela cheia |
 | Setas e Enter, ou mouse | Escolher nos menus. Enter completa a fala e avança. Esc pula o prólogo. |

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import math
 
 DURACAO = 5.5
-ALCANCE = 340
+ALCANCE = 520
 
 @dataclass(frozen=True)
 class Vestigio:
@@ -26,7 +26,8 @@ class Vestigio:
 
 def fontes(j):
     from .resgates import fontes as fontes_vivas
-    luzes=[(*j.lume.rect.center,j.raio),*((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios),*fontes_vivas(j)]
+    from .luzes_mundo import fontes as globos
+    luzes=[(*j.lume.rect.center,j.raio),*((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios),*fontes_vivas(j),*globos(j)]
     if j.boss and j.boss.estado.startswith('coro_'):
         from .ultimo_chamado import alvo
         luzes.append((*alvo(j.boss),70))
@@ -34,9 +35,10 @@ def fontes(j):
 
 
 def ponto_visivel(j,ponto,margem=0,terrenos=None):
-    """Luz com oclusão. Paredes e patamares impedem descobrir o outro lado."""
-    terrenos=j.solidos if terrenos is None else terrenos
-    for x,y,raio in fontes(j):
-        if math.dist(ponto,(x,y))>raio+margem:continue
-        if not any(t.rect.clipline((x,y),ponto) for t in terrenos):return True
-    return False
+    """Luz atravessa o terreno; alcance e duração continuam limitando a visão.
+
+    `terrenos` é aceito para compatibilidade com chamadas anteriores. Colisão
+    física e percepção dos ataques são sistemas separados da iluminação.
+    """
+    from .luzes_mundo import zonas
+    return any(z.collidepoint(ponto) for z in zonas(j)) or any(math.dist(ponto,(x,y))<=raio+margem and raio>0 for x,y,raio in fontes(j))

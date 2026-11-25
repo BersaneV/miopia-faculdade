@@ -20,7 +20,8 @@ class Missao:
 
 def conhecidas(j):
     out=[Missao("principal","O caminho dos sobreviventes","Colônia da Figueira",
-                "Quatro raízes",j.etapa,"Em curso",
+                "Quatro raízes",j.etapa,"Concluída" if j.concluida else "Em curso",
+                "As raízes estão acesas. Procure os sobreviventes e explore a estufa que ficou para trás." if j.concluida else
                 "Recolha orvalho, reabra as passagens e enfrente a guardiã de cada raiz.",
                 "Água e passagem para quem ficou nas bordas.",motivo="Os sobreviventes precisam voltar à figueira antes de o orvalho secar.")]
     if j.modo!="historia" or hasattr(j,"sala_id"):
@@ -72,7 +73,7 @@ def conhecidas(j):
                           'Em curso' if falta else 'Concluída',pistas[falta.id] if falta else 'Os três sobreviventes voltaram.',
                           'Companheiros no abrigo: escolha luz na trilha ou um mantimento único.',
                           'resgate_'+falta.id if falta else '', 'A colônia precisa de quem cuida, transporta água e planta.'))
-    if 'jardim_aberto' in j.cartografia:
+    if 'jardim_aberto' in j.cartografia or len(j.sobreviventes)==3:
         from .jardim import objetivo
         ident,passo=objetivo(j)
         out.append(Missao('jardim','A primeira muda','Aru','Nascente do Jardim',0,

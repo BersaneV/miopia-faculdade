@@ -172,8 +172,9 @@ REGISTROS = {
 def objetos(j):
     from .resgates import objetos as pessoas
     from .jardim import objetos as pontos_jardim
+    from .encontros import objetos as lanternas
     return tuple(o for o in PONTOS
-                 if not (o.tipo=="reliquia" and j.bolsa.estoque.get(o.id.removeprefix("reliquia_"))))+pessoas(j)+pontos_jardim(j)
+                 if not (o.tipo=="reliquia" and j.bolsa.estoque.get(o.id.removeprefix("reliquia_"))))+pessoas(j)+pontos_jardim(j)+lanternas(j)
 
 
 def camera(j,dt=None):
@@ -222,6 +223,9 @@ def ralo_iluminado(j,o):
 
 
 def interagir(j,o):
+    if o.tipo=='lanterna':
+        from .encontros import interagir
+        interagir(j,o);return
     if o.tipo=='jardim':
         from .jardim import interagir as usar_jardim
         usar_jardim(j,o)
@@ -328,7 +332,7 @@ def objetivo(j):
 def passo(j,dt,cmd,clarao):
     l=j.lume
     if j.destino_vertical is not None:
-        if l.energia<=0:
+        if l.vida<=0:
             j.perder_fagulha()
             return
         distancia=j.destino_vertical-l.rect.bottom
@@ -356,12 +360,16 @@ def passo(j,dt,cmd,clarao):
         j.eventos.append("pouso")
     if cmd.deslize and l.slide>=.60:
         j.eventos.append("deslize")
+    vida_antes=l.vida
     if l.arma.avancar(dt,l):
         j.eventos.append("golpe")
+    if l.vida<vida_antes:
+        j.eventos.append('sacrificio');j.notificar('O golpe usou vida porque faltou brilho.',3.)
+    if l.vida<=0:j.perder_fagulha('sacrificio');return
     j.combater_inimigos(dt,l.arma.area(l),clarao)
     from .jardim import atualizar
     atualizar(j)
-    if l.energia<=0:
+    if l.vida<=0:
         j.perder_fagulha()
     visitar(j)
     camera(j,dt)

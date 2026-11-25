@@ -61,6 +61,9 @@ def suportes():
 
 def desenhar_ponto(camada,o,j,cx):
     x=o.x-cx
+    if o.tipo=='lanterna':
+        from .encontros import desenhar
+        desenhar(camada,o,j,cx);return
     if o.tipo=='sobrevivente':
         from .arte_resgates import pessoa
         pessoa(camada,o,j,cx,j.tempo)
@@ -143,6 +146,8 @@ def desenhar(s,j,t,nivel_brilho):
             inimigo(camada,e,cx,j.lume,t)
     from .arte_resgates import luzes
     luzes(camada,j,cx,t)
+    from .luzes_mundo import desenhar as globos
+    globos(camada,j,cx)
     nivel=min(3,nivel_brilho+int(j.concluida))
     compor_luz(luz,j,cx,cy,nivel)
     aplicar_nevoa(camada,luz,cy,fundo_visao,nivel)

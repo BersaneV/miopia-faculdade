@@ -13,7 +13,9 @@ class Item:
 
 
 ITENS = (
-    Item("balsamo", "Bálsamo de Mimo", "Recupera 35 de luz. Guarde para depois de um golpe ou clarão."),
+    Item('globo','Globo de vaga-lume','F fixa uma luz de alcance 440 px permanentemente no local. Não some ao morrer. Guarde para um caminho escuro.'),
+    Item('semente_luz','Núcleo de clareira','Recolhido após derrotar uma patrulha ou mini-chefe. E na tocha da clareira acende sua região.',False,True),
+    Item("balsamo", "Bálsamo de Mimo", "Recupera até 35 de vida e 35 de brilho. Guarde para depois de um golpe ou clarão."),
     Item("pavio", "Pavio de pólen", "Amplia a visão por 12 s. Clarões lançados nesse tempo duram 9 s."),
     Item("casulo", "Casulo de seda", "Absorve o próximo ataque de uma criatura."),
     Item("tanino", "Tanino de casca", "Amolece carapaças por 18 s: cortes dão 2,5× dano em besouros e atravessam a guarda."),
@@ -21,9 +23,9 @@ ITENS = (
     Item("concha", "Concha de escuta", "Localiza a criatura mais próxima. Aguarde cinco segundos entre escutas.", True),
     Item("espinho", "Espinho de acácia", "Relíquia ativa ao recolher. Cortes causam 25% mais dano a criaturas comuns.", True, True),
     Item("asa", "Membrana de libélula", "Relíquia ativa ao recolher. Lume anda e plana 12% mais rápido.", True, True),
-    Item("resina", "Resina de âmbar", "Relíquia ativa ao recolher. Consumo passivo de luz −35%. Clarão custa 18 em vez de 22.", True, True),
+    Item("resina", "Resina de âmbar", "Relíquia ativa ao recolher. Clarão custa 18 em vez de 22. Ataques de luz gastam 20% menos brilho.", True, True),
     Item('frasco','Ampola do berçário','Mimo amplia a bolsa: capacidade de bálsamos passa de 2 para 3. Não cria cargas sozinha.',True,True),
-    Item('lente','Lente de casca','A luz portátil alcança 18 px a mais. Paredes e plataformas continuam ocultando o outro lado.',True,True),
+    Item('lente','Lente de casca','A luz portátil alcança 18 px a mais, atravessando terreno. Descoberta ainda depende do alcance e da tela.',True,True),
 )
 POR_ID = {item.id: item for item in ITENS}
 
@@ -106,12 +108,14 @@ class Bolsa:
             return None
         item = self.equipado
         if item == "balsamo":
-            if j.lume.energia >= 99.99:
-                j.notificar("Sua luz está cheia. O bálsamo continua na bolsa.")
+            if j.lume.energia >= 99.99 and j.lume.vida>=99.99:
+                j.notificar("Vida e brilho cheios. O bálsamo continua na bolsa.")
                 return None
             antes = j.lume.energia
+            vida_antes=j.lume.vida
             j.lume.energia = min(100., antes + 35.)
-            mensagem = f"Bálsamo · +{round(j.lume.energia - antes)} de luz."
+            j.lume.vida=min(100.,vida_antes+35.)
+            mensagem = f"Bálsamo · +{round(j.lume.vida-vida_antes)} vida / +{round(j.lume.energia - antes)} brilho."
             som = "coleta"
         elif item == "pavio":
             if self.luz_ate > j.tempo:
@@ -135,6 +139,10 @@ class Bolsa:
             j.aplicar_reliquias()
             mensagem="Tanino · 18 s de cortes que rompem carapaça."
             som="seiva"
+        elif item=='globo':
+            from .luzes_mundo import colocar
+            if not colocar(j):return None
+            mensagem='Globo fixado permanentemente. Mesmo com o brilho vazio, a luz dele continua.';som='resgate'
         elif item == "polen":
             from .ferramentas import espalhar_polen
             afetados=espalhar_polen(j)

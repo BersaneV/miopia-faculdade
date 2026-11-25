@@ -104,8 +104,8 @@ def interagir(j,o):
         j.notificar('Nascente plantada. A água abriu o retorno a oeste, junto ao viveiro antigo.',7.)
     elif ident=='jardim_lente':
         j.bolsa.receber('lente',1);j.aplicar_reliquias();j.eventos.append('coleta')
-        j.memorizar('Lente de casca','Uma gota endurecida na casca concentra a luz de Lume. A visão portátil cresce 18 px; o mapa continua exigindo visão desobstruída.')
-        j.notificar('Lente de casca: visão portátil +18. Não revela salas através de paredes.',6.)
+        j.memorizar('Lente de casca','Uma gota endurecida na casca concentra a luz de Lume. A visão portátil cresce 18 px. Luz atravessa terreno; o mapa registra somente o alcance iluminado dentro da tela.')
+        j.notificar('Lente de casca: visão portátil +18. Só registra áreas iluminadas dentro da tela.',6.)
     elif ident=='jardim_memoria':
         if ident not in c:
             c.add(ident);j.bolsa.receber('balsamo',1);j.bolsa.receber('pavio',1)
@@ -135,6 +135,7 @@ def objetivo(j):
 
 def orientar(j):
     from .orientacao import _alvo
+    if 'jardim_plantado' in j.cartografia:return None
     if j.modo!='historia' or not (j.missao=='jardim' or j.concluida and j.missao=='principal' and len(j.sobreviventes)==3):return None
     if not j.em_vertical:
         x=630 if j.etapa==0 else 1944 if j.etapa==1 else 34

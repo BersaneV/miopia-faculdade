@@ -25,6 +25,8 @@ class Comando:
     golpe: bool = False
     clarao: bool = False
     interagir: bool = False
+    forte: bool = False
+    carregado: bool = False
 
 
 def aproximar(valor, alvo, passo):
@@ -48,6 +50,9 @@ class Lume:
         self.golpe = self.golpe_cd = self.pulso = self.pulso_cd = 0.
         self.iframes = self.impacto = self.planeio = 0.
         self.energia = 100.
+        self.vida = 100.
+        self.abate_ate=0.;self.ganho_abate=(0.,0.)
+        self.combo_acertos=0
         self.vidas = vidas
         self.em_corda = False
         self.corda_destino = None
@@ -206,12 +211,19 @@ class Lume:
             self.ignorar_topo = None
         return saltou
 
+    def gastar_brilho(self,custo):
+        if self.vida<=0:return False
+        brilho=min(self.energia,custo)
+        self.energia=max(0.,self.energia-brilho)
+        self.vida=max(0.,self.vida-(custo-brilho))
+        return True
+
     def atacar(self, cmd):
-        if cmd.golpe:
-            self.arma.pedir(cmd.baixo and not self.chao, cmd.deslize and bool(cmd.mover))
-        if cmd.clarao and self.pulso_cd <= 0 and self.energia >= getattr(self,"custo_clarao",22.):
-            self.energia -= getattr(self,"custo_clarao",22.)
+        if cmd.golpe or cmd.forte:
+            self.arma.pedir(cmd.baixo and not self.chao, cmd.deslize and bool(cmd.mover),cmd.forte,cmd.carregado)
+        if cmd.clarao and self.pulso_cd <= 0 and self.gastar_brilho(getattr(self,"custo_clarao",22.)):
             self.pulso, self.pulso_cd = .55, 2.50
+            self.arma.clarao()
             return True
         return False
 
@@ -245,6 +257,8 @@ class Jornada:
         self.camera_y = 0.
         self.cartografia = set()
         self.explorado = set()
+        self.marcas = []
+        self.globos=[];self.tochas=set();self.nucleos=set();self.tutorial=set()
         self.missao = "principal"
         self.marco_vertical = "bosque"
         self.destino_vertical = None
@@ -288,6 +302,8 @@ class Jornada:
         if subsolo.ativo(self) and "inimigo_2860" not in self.flags:
             self.inimigos.append(Habitante("aranha",2860,1102,dificuldade=self.dificuldade))
         if raizes_bosque.ativo(self):raizes_bosque.povoar(self)
+        from .encontros import povoar
+        povoar(self)
         for e in self.inimigos:
             e.guarda = self.tranca_fechada and e.origem[0] == VIGIA_X and e.tipo == "carabideo"
         # No Bosque, a primeira silhueta a aparecer precisa ser a de Lume.
@@ -306,10 +322,13 @@ class Jornada:
         """Salva o progresso assentado. Objetos transitórios da arena renascem no marco."""
         return {
             "versao": 3, "mapa_grade": 24, "explorado": sorted(self.explorado), "missao": self.missao,
+            'marcas':[dict(m) for m in self.marcas],
+            'globos':[dict(g) for g in self.globos],'tochas':sorted(self.tochas),'nucleos':sorted(self.nucleos),'tutorial':sorted(self.tutorial),
             "corte": {"ativo": self.em_vertical, "marco": self.marco_vertical,
                       "memoria": sorted(self.cartografia)}, "modo": self.modo, "dificuldade": self.dificuldade,
             "etapa": self.etapa, "volta": self.volta, "vidas": self.lume.vidas,
             'energia': max(0.,self.lume.energia), 'retorno_pendente':self.estado in ('caido','derrota'),
+            'vida':max(0.,self.lume.vida),
             "tempo": self.tempo, "tempo_restante": self.tempo_restante,
             "pontuacao": self.pontuacao, "diario": list(self.diario),
             "bolsa": self.bolsa.salvar(self.tempo),
@@ -332,6 +351,17 @@ class Jornada:
         if not isinstance(memoria,list) or len(memoria)>60000 or not all(isinstance(v,str) and len(v)<80 for v in memoria):
             raise ValueError("Mapa descoberto inválido")
         jogo.explorado = set(memoria) if dados.get("mapa_grade")==24 else set()
+        from .marcas_mapa import carregar as carregar_marcas
+        jogo.marcas=carregar_marcas(dados.get('marcas') if dados.get('mapa_grade')==24 else None,jogo.explorado)
+        from .luzes_mundo import carregar as carregar_globos
+        jogo.globos=carregar_globos(dados.get('globos'))
+        for nome,permitidos in (('tochas',{'vigilia','bercario','jardim'}),('nucleos',{'vigilia','bercario','jardim'})):
+            valor=dados.get(nome,[])
+            if not isinstance(valor,list) or len(valor)>3 or not all(isinstance(v,str) for v in valor) or not set(valor)<=permitidos:raise ValueError('Clareira salva inválida')
+            setattr(jogo,nome,set(valor))
+        tutorial=dados.get('tutorial',[])
+        if not isinstance(tutorial,list) or len(tutorial)>100 or not all(isinstance(v,str) and len(v)<60 for v in tutorial):raise ValueError('Tutorial salvo inválido')
+        jogo.tutorial=set(tutorial)
         escolha=dados.get("missao")
         jogo.missao = escolha if escolha in ("principal","secundaria","entrega_mimo",'pedido_raizes','resgates','jardim',*(f"pedido_{i}" for i in range(4))) else "principal"
         for visita in dados["fases"]:
@@ -372,8 +402,11 @@ class Jornada:
                 corte_vertical.entrar(jogo,marco)
         jogo.reiniciar()
         energia=dados.get('energia',100.)
-        if not isinstance(energia,(int,float)) or not math.isfinite(energia):raise ValueError('Luz salva inválida')
-        if not dados.get('retorno_pendente',False):jogo.lume.energia=max(.01,min(100.,energia))
+        if type(energia) not in (int,float) or not math.isfinite(energia):raise ValueError('Luz salva inválida')
+        vida=dados.get('vida',max(.01,min(100.,energia)))
+        if type(vida) not in (int,float) or not math.isfinite(vida):raise ValueError('Vida salva inválida')
+        if not dados.get('retorno_pendente',False):
+            jogo.lume.energia=max(0.,min(100.,energia));jogo.lume.vida=max(0.,min(100.,vida))
         return jogo
 
     @property
@@ -391,6 +424,7 @@ class Jornada:
 
     @property
     def raio(self):
+        if self.lume.energia<=0:return 0.
         portatil = 90 + .38 * max(0., min(100., self.lume.energia))
         if self.bolsa.luz_ate > self.tempo:
             portatil += 65
@@ -481,6 +515,8 @@ class Jornada:
             out.extend(subsolo.objetos(self))
         if raizes_bosque.ativo(self):out.extend(raizes_bosque.objetos(self))
         out.extend(resgates.objetos(self))
+        from .encontros import objetos as lanternas
+        out.extend(lanternas(self))
         return out
 
     def proximo(self):
@@ -598,6 +634,7 @@ class Jornada:
         self.lume.bonus_dano = self.bolsa.bonus_dano
         self.lume.bonus_velocidade = self.bolsa.bonus_velocidade
         self.lume.custo_clarao = 18. if self.bolsa.estoque["resina"] else 22.
+        self.lume.fator_custo_luz=.8 if self.bolsa.estoque['resina'] else 1.
         self.lume.tanino = self.bolsa.tanino_ate>self.tempo
 
     def notificar(self, texto, segundos=3.8):
@@ -617,6 +654,7 @@ class Jornada:
         return self.bolsa.item.nome
 
     def usar_item(self):
+        if self.estado!='jogando' or self.lume.vida<=0:return None
         if self.estado == "jogando" and not self.dialogo:
             return self.bolsa.usar(self)
         return None
@@ -628,7 +666,7 @@ class Jornada:
             self.notificar('Conclua o golpe antes de trocar a arma.')
             return False
         agulha = self.lume.arma.equipamento == 'agulha'
-        self.notificar('Agulha de taquara: alcance longo, golpe mais lento, 2 de luz por corte.' if agulha
+        self.notificar('Agulha de taquara: alcance longo e golpe mais lento. Só Ctrl carrega luz e tem custo.' if agulha
                        else 'Espinho: cortes rápidos e curtos, sem custo de luz.')
         return True
 
@@ -650,6 +688,9 @@ class Jornada:
                 inimigo.repor()
         self.recolocar(self.checkpoint)
         self.lume.energia = 100.
+        self.lume.vida = 100.
+        self.lume.abate_ate=0.
+        self.lume.combo_acertos=0
         self.lume.iframes = 1.35
         self.lume.golpe_cd = self.lume.pulso_cd = 0.
         self.camera = max(0, min(self.fase.width - 960, self.checkpoint[0] - 340))
@@ -672,36 +713,42 @@ class Jornada:
         self.lume.iframes, self.lume.impacto = 1.25, .25
         self.lume.arma.cancelar()
         self.lume.golpe = 0.
-        self.lume.energia = max(0., self.lume.energia - self.dano)
+        self.lume.vida = max(0., self.lume.vida - self.dano)
+        self.lume.combo_acertos=0
         self.eventos.append("dano")
 
     def recuperar_queda(self):
-        energia=self.lume.energia-25.
-        if energia<=0:
+        vida=self.lume.vida-25.
+        if vida<=0:
             self.perder_fagulha(motivo="queda")
             return
         destino=getattr(self,"retorno_queda",self.checkpoint)
         self.recolocar(destino)
-        self.lume.energia=energia
+        self.lume.vida=vida
+        self.lume.combo_acertos=0
         self.lume.iframes=1.5
         self.eventos.append("dano")
-        self.notificar("A queda custou 25 de luz. Lume voltou à última borda segura.")
+        self.notificar("A queda custou 25 de vida. Lume voltou à última borda segura.")
         if self.em_vertical:
             corte_vertical.camera(self)
         elif subsolo.ativo(self):
             subsolo.camera(self)
         elif raizes_bosque.ativo(self):raizes_bosque.camera(self)
 
-    def perder_fagulha(self, motivo="energia"):
+    def perder_fagulha(self, motivo="vida"):
         if self.estado != "jogando":
             return
         self.lume.vidas = max(0, self.lume.vidas - 1)
         self.lume.energia = 0.
+        self.lume.vida = 0.
         self.motivo_morte = motivo
         self.estado = "caido" if self.lume.vidas else "derrota"
         self.eventos.append("morte")
 
     def interagir(self, o):
+        if o.tipo=='lanterna':
+            from .encontros import interagir
+            interagir(self,o);return
         if o.tipo=='sobrevivente':
             resgates.conversar(self,o)
             return
@@ -800,6 +847,7 @@ class Jornada:
                 self.restauradas += 1
                 self.pontuacao += 180
                 self.lume.energia = 100.
+                self.lume.vida = 100.
                 if self.modo == "infinito":
                     premio = 51 - min(5, self.volta) * 4
                     self.tempo_restante = min(150., self.tempo_restante + premio)
@@ -842,8 +890,18 @@ class Jornada:
             self.interagir(o)
             if self.dialogo or self.estado != "jogando" or origem != (self.etapa, self.em_vertical):
                 return
+        vida_antes=self.lume.vida
         clarao = self.lume.atacar(cmd)
+        if self.lume.vida<vida_antes:
+            self.eventos.append('sacrificio')
+            self.notificar('Sem brilho suficiente: a habilidade consome vida.',3.)
+        if self.lume.vida<=0:
+            self.perder_fagulha('sacrificio' if self.lume.vida<vida_antes else 'vida');return
         if clarao:
+            from .luzes_mundo import claro
+            for e in self.inimigos:
+                if e.ativo and math.dist(e.rect.center,self.lume.rect.center)<=520 and not claro(self,e.rect.center):
+                    e.cego=.8 if e.tipo!='carabideo' else .4
             self.vestigios.append(Vestigio(*self.lume.rect.center, self.tempo, 9. if self.bolsa.luz_ate>self.tempo else DURACAO))
             self.eventos.append("pulso")
             if not self.em_vertical:
@@ -861,10 +919,12 @@ class Jornada:
                 break
         from .descoberta import revelar
         revelar(self)
+        from .tutorial import atualizar as ensinar
+        ensinar(self,cmd)
 
     def passo(self, dt, cmd, clarao):
         l = self.lume
-        if l.chao and not l.em_corda and l.energia>0 and any(
+        if l.chao and not l.em_corda and l.vida>0 and any(
                 abs(l.rect.bottom-t.rect.top)<1.5 and l.rect.right>t.rect.left
                 and l.rect.left<t.rect.right for t in self.solidos):
             self.retorno_queda = tuple(l.rect.midbottom)
@@ -874,7 +934,7 @@ class Jornada:
         self.aviso_t = max(0., self.aviso_t - dt)
         if self.aviso_t <= 0: self.aviso = ""
         self.aplicar_reliquias()
-        l.energia -= dt * (self.dreno + (.28 + min(5, self.volta) * .08 if self.modo == "infinito" else 0)) * self.bolsa.fator_dreno
+        # Brilho estável: só habilidades de luz têm custo (decisão S08).
         if self.modo == "infinito":
             self.tempo_restante -= dt
             if self.tempo_restante <= 0:
@@ -899,7 +959,6 @@ class Jornada:
             if l.movimento(dt, cmd, self.solidos, corrente, True):
                 self.eventos.append("pulo")
             if l.bateu:
-                l.energia = max(0., l.energia - 3.)
                 self.eventos.append("impacto")
         l.rect.left = max(0, min(l.rect.left, self.fase.width - l.rect.w))
         pouso = not estava_chao and l.chao
@@ -938,29 +997,36 @@ class Jornada:
             self.boss = Encontro(self.etapa, ARENA, CHAO, FIM_ARENA - ARENA,
                                  despertar=self.modo=='historia',aliados=len(self.sobreviventes))
             self.eventos.append("arena")
+        vida_antes=l.vida
         if l.arma.avancar(dt, l):
             self.eventos.append("golpe")
+        if l.vida<vida_antes:
+            self.eventos.append('sacrificio');self.notificar('O golpe usou vida porque faltou brilho.',3.)
+        if l.vida<=0:self.perder_fagulha('sacrificio');return
         golpe = l.arma.area(l)
         if self.boss and not self.boss.vencido:
             l.rect.left = max(l.rect.left, ARENA)
             ruido = 1.0 if l.slide > 0 or pouso else min(.66, abs(l.vx) / 360) if l.chao else .08
+            vida_chefe=self.boss.vida
             eventos = self.boss.update(dt, l.rect, ruido=ruido, golpe=golpe, clarao=clarao,
                                        interagir=cmd.interagir, direcao=cmd.mover,
                                        serie=l.arma.serie,bonus_dano=l.bonus_dano,
                                        dano_corte=2*l.arma.perfil.dano if l.arma.perfil else 2.)
             self.eventos.extend(e for e in eventos if e != "dano_jogador")
+            if self.boss.vida<vida_chefe and golpe and self.boss.ultimo_corte==l.arma.serie:self.acertou_combo()
             if 'gota_final' in eventos:
                 l.energia=max(l.energia,32.+5*self.boss.aliados)
                 self.notificar('Orvalho do ninho: um pulso guardado. K perto da marca devolve o sinal.',5.)
             if "dano_jogador" in eventos: self.ferir()
             if self.boss.vencido:
                 self.flags.add("chefe")
+                self.recuperar_abate(15,25)
                 self.notificar("A guardiã encontra a calma." if self.etapa == 3 else "A raiz libera a saída da arena.")
                 self.pontuacao += 120
                 self.eventos.append("porta")
         else:
             self.combater_inimigos(dt, golpe, clarao)
-        if l.energia <= 0:
+        if l.vida <= 0:
             self.perder_fagulha()
         alvo = l.rect.centerx - (410 if l.face < 0 else 340)
         if self.boss and not self.boss.vencido:
@@ -971,7 +1037,23 @@ class Jornada:
             subsolo.camera(self, dt)
         if raizes_bosque.ativo(self):raizes_bosque.atualizar(self,dt)
 
+    def recuperar_abate(self,vida=3.,brilho=8.):
+        l=self.lume
+        if l.vida<=0:return
+        ganho=(min(100.,l.vida+vida)-l.vida,min(100.,l.energia+brilho)-l.energia)
+        l.vida+=ganho[0];l.energia+=ganho[1]
+        if any(ganho):
+            l.ganho_abate=ganho;l.abate_ate=self.tempo+1.4;self.eventos.append('coleta')
+
+    def acertou_combo(self):
+        l=self.lume
+        if l.vida<=0:return
+        l.combo_acertos+=1
+        l.energia=min(100.,l.energia+.35*min(8.,1.25**min(10,l.combo_acertos//3)))
+
     def combater_inimigos(self, dt, golpe, clarao):
+        from .encontros import coordenar
+        coordenar(self)
         lume = self.lume
         terrenos = self.solidos
         for e in self.inimigos:
@@ -982,7 +1064,9 @@ class Jornada:
             golpe = lume.arma.area(lume)
             e.companhia=next((outro.rect.centerx for outro in self.inimigos if outro is not e
                 and outro.ativo and abs(outro.rect.centerx-e.rect.centerx)<350),None)
+            vida_antes=e.vida
             resultado = e.acertar(lume.arma, golpe, clarao, lume)
+            if e.vida<vida_antes and golpe and lume.arma.serie==e.ultimo_corte:self.acertou_combo()
             if resultado:
                 self.eventos.append(resultado)
                 if (lume.arma.tipo == "queda" and golpe and lume.arma.serie == e.ultimo_corte
@@ -997,6 +1081,7 @@ class Jornada:
                     else:
                         self.flags.add("inimigo_" + str(e.origem[0]))
                     self.pontuacao += 18
+                    self.recuperar_abate(10,18) if isinstance(e,raizes_bosque.Caruncho) else self.recuperar_abate()
                     if e.guarda:
                         self.eventos.append("porta")
                         self.notificar("O vigia recua. A trança cai e a ponte das sementes está livre.", 5.)
@@ -1017,7 +1102,7 @@ class Jornada:
                     vivos.append(p)
             e.projeteis = vivos
             if atingiu and lume.iframes <= 0:
-                energia = lume.energia
+                vida = lume.vida
                 self.ferir()
-                if lume.energia < energia:
+                if lume.vida < vida:
                     lume.vx += 143 if lume.rect.centerx >= e.rect.centerx else -143

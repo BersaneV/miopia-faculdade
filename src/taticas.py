@@ -48,6 +48,7 @@ class Habitante(Inimigo):
         self.acao_atual=""
         self.familia_atual=0
         self.companhia=None
+        self.grupo=None;self.papel='';self.colegas=[];self.cego=0.
         self.pos_manobra=Vetor(self.rect.center)
 
     def viavel(self,indice,lume,terrenos):
@@ -71,8 +72,9 @@ class Habitante(Inimigo):
             afinidade=math.exp(-.5*((d-centros[primeira])/110)**2)
             movimento=1.35 if "flanco" in combo.passos and (abs(lume.vx)>70 or self.companhia is not None) else 1.
             memoria=.18 if self.memoria_combos and ident==self.memoria_combos[-1] else .55 if ident in self.memoria_combos else 1.
-            pressao=1.15 if len(combo.passos)>1 and lume.energia<50 else 1.
-            pesos.append(afinidade*movimento*memoria*pressao)
+            pressao=1.15 if len(combo.passos)>1 and lume.vida<50 else 1.
+            papel=3.4 if self.papel=='flanco' and 'flanco' in combo.passos else 2.8 if self.papel=='cobertura' and primeira in (1,2) else 1.
+            pesos.append(afinidade*movimento*memoria*pressao*papel)
         return pesos
 
     def escolher_combo(self,lume,terrenos):
@@ -86,6 +88,11 @@ class Habitante(Inimigo):
         return max(i for i,p in enumerate(pesos) if p>0)
 
     def preparar(self,lume,terrenos=()):
+        if self.cego>0:self.t=.12;return ''
+        if self.grupo:
+            ativos=[e for e in self.colegas if e is not self and e.ativo and e.estado in ('aviso','investida')]
+            if len(ativos)>=2 or any(e.estado=='aviso' and e.t>max(.36,e.ficha.aviso/e.ritmo*.88)-.18 for e in ativos):
+                self.t=.12;return ''
         if not self.plano:
             self.combo_id=self.escolher_combo(lume,terrenos)
             if self.combo_id<0:self.t=.18;return ""
@@ -141,6 +148,7 @@ class Habitante(Inimigo):
 
     def update(self,dt,lume,raio,restaurado,terrenos):
         if self.estado=="manobra":
+            self.cego=max(0.,self.cego-dt)
             self.relogio+=dt;self.t-=dt
             self.flash=max(0,self.flash-dt);self.lentidao=max(0,self.lentidao-dt)
             self.seguir(self.pos_manobra,305*(.6 if self.lentidao>0 else 1),dt,terrenos)
@@ -156,10 +164,21 @@ class Habitante(Inimigo):
         if abs(lume.rect.centerx-self.rect.centerx)>400:self.plano=[]
         return sons,dano
 
+    def patrulhar(self,lume,distancia,dt,terrenos):
+        if self.grupo and distancia<600 and abs(lume.rect.centery-self.rect.centery)<180:
+            lado=1 if self.rect.centerx>=lume.rect.centerx else -1
+            deslocamento=-lado*85 if self.papel=='flanco' else lado*(170 if self.papel=='cobertura' else 75)
+            destino=Vetor(lume.rect.centerx+deslocamento,self.origem[1]-self.rect.h/2)
+            self.seguir(destino,195,dt,terrenos)
+        else:super().patrulhar(lume,distancia,dt,terrenos)
+
     def acertar(self,arma,area,clarao,lume):
         antes,tempo=self.estado,self.t
         resultado=super().acertar(arma,area,clarao,lume)
         if resultado=="acerto" and self.ativo:
+            if self.grupo and antes in ('aviso','investida'):
+                self.estado,self.t=antes,tempo
+                return resultado
             if not clarao and arma.tipo in ("corte1","corte2") and antes in ("aviso","investida"):
                 self.estado,self.t=antes,tempo
             elif self.estado=="atordoado":self.plano=[]

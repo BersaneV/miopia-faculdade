@@ -44,7 +44,7 @@ ENSAIOS = (
     Ensaio('A Coruja',3,(ARENA-20,CHAO),('meio','marco','roldana','contrapeso','eco_antigo'),
            'Garras, rasantes e penas têm avisos próprios. E duas vezes na roda chama a Coruja à raiz direita. Suba nos apoios e use K perto da face exposta.'),
     Ensaio('Oficina dos Espinhos',0,(160,CHAO),(),
-           'V alterna espinho rápido e agulha longa, que custa 2 de luz por corte. Compare em dois alvos imóveis. E no abrigo restaura luz e alvos. Protótipo isolado.'),
+           'V alterna espinho rápido e agulha longa. Compare em dois alvos imóveis. Ctrl carrega luz; ataques normais são gratuitos. E no abrigo restaura reservas e alvos. Protótipo isolado.'),
     Ensaio('Raízes do Bosque',0,(1538,CHAO),('pedido_raizes','inimigo_1548','inimigo_1660','inimigo_1978'),
            'Leia a marca com E. S + Espaço na grade à direita desce por três salas no mesmo mapa. O pino da galeria abre o viveiro; o cipó do poço sempre permite voltar.'),
     Ensaio('Caruncho do Viveiro',0,(2230,1282),('pedido_raizes','pino_ninho','porta_ninho'),
@@ -59,6 +59,12 @@ ENSAIOS = (
            'Pós-jogo isolado. Explore as luzes locais dos sobreviventes e use M: a cartografia continua exigindo visão real. O save da História é preservado.'),
     Ensaio('Escuta dos ataques',0,(160,CHAO),(),
            'J escolhe a família; K escolhe a espécie; E toca o aviso à direita. Trinta avisos próprios. Compare por ouvido antes de avaliar no combate.'),
+    Ensaio('Clareira da Vigília',0,(1450,CHAO),('meio','valvula','peca'),
+           'Três guardas combinam pressão, flanco e cobertura. J/L alternam golpes; Ctrl carrega luz. K cega no escuro. Após vencer, E recolhe o núcleo e E na tocha acende a clareira.'),
+    Ensaio('Globos e tochas',0,(1700,1282),('pino_ninho','porta_ninho','caruncho_vencido'),
+           'Recolha núcleo e globo com E. Vá à tocha à direita e use E: a região ficará clara. Q escolhe globo; F fixa outra luz permanente no local. Os ensaios preservam a História.'),
+    Ensaio('Combos da colônia',0,(160,CHAO),(),
+           'J/J/J, J/L/J, K/L. Ctrl + J ou L dobra o dano e gasta brilho, depois vida se faltar. Acertos recuperam brilho; dano zera o multiplicador. E no abrigo repõe alvos.'),
     Ensaio("Duelo da aranha",0,ABRIGO,(),
            "Referência S02 de fio e salto, com replay. Os vinte combos novos estão em Patrulha em dupla e na História. E recupera luz no abrigo."),
 )
@@ -72,12 +78,14 @@ def preparar_ensaio(indice, dificuldade, semente=SEMENTE_ARANHA):
     if cena.nome=='Escuta dos ataques':
         from .escuta import Escuta
         return Escuta(dificuldade)
-    if cena.nome=='Oficina dos Espinhos':
+    if cena.nome in ('Oficina dos Espinhos','Combos da colônia'):
         from .oficina_armas import Oficina
         jogo=Oficina(dificuldade)
+        if cena.nome=='Combos da colônia':jogo.ensaio_combos=True
         jogo.notificar(cena.pista,8)
         return jogo
     jogo=Jornada("historia",dificuldade,cena.etapa)
+    jogo.campo_testes=True
     jogo.flags.update(cena.flags)
     jogo.entrar(cena.etapa)
     jogo.checkpoint=cena.pos
@@ -104,6 +112,8 @@ def preparar_ensaio(indice, dificuldade, semente=SEMENTE_ARANHA):
         jogo.bolsa.receber("tanino",2)
     if cena.nome in ('Raízes do Bosque','Caruncho do Viveiro'):
         jogo.missao='pedido_raizes'
+        jogo.bolsa.receber('balsamo',1)
+    if cena.nome=='Clareira da Vigília':
         jogo.bolsa.receber('balsamo',1)
     jogo.lume.iframes=0.
     jogo.notificar(cena.pista,8)

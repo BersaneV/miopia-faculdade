@@ -59,6 +59,7 @@ class Oficina(Jornada):
 
     @property
     def objetivo(self):
+        if getattr(self,'ensaio_combos',False):return 'Combine J, L e K · Ctrl + ataque usa brilho · acerte sem sofrer dano'
         return 'Compare espinho e agulha · V troca a arma fora do golpe'
 
     @property

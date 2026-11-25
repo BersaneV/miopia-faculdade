@@ -9,6 +9,7 @@ MEDIDAS = {"morcego": (65, 44), "aranha": (65, 39), "vespa": (61, 42),
            "sombra": (55, 47), "carabideo": (73, 46), "cobra":(74,36)}
 def efeito(s, nome, centro, dimensoes, espelho=False):
     if nome=="avanco": nome="corte3"
+    if nome in ('pesado','quebra','retorno','aurora'):nome='corte3' if nome!='retorno' else 'corte2'
     asset = "efeito_" + nome
     textura = imagem(asset + ".png", *dimensoes, espelho)
     s.blit(textura, textura.get_rect(center=centro))
@@ -33,6 +34,9 @@ def golpe_lume(s, lume, cx):
     if restante <= 0:
         return
     tinta = tuple(int(v * (.53 + .47*min(1., restante))) for v in AMBAR)
+    if ataque.luminoso:
+        tinta=(159,226,214)
+        brilho(s,(round(x+ataque.face*25),round(y)),28)
     if ataque.tipo == "queda":
         y = lume.rect.bottom-4
         maior = int(18 + progresso*perfil.alcance)
@@ -55,6 +59,10 @@ def golpe_lume(s, lume, cx):
 
 def corpo(s,e,cx,t):
     x, y = e.rect.centerx-cx, e.rect.bottom
+    if getattr(e,'cego',0)>0:
+        for n in range(3):
+            ang=t*7+n*2.1
+            losango(s,round(x+math.cos(ang)*14),round(e.rect.top-9+math.sin(ang)*4),2,OSSO)
     pose = int(e.estado in ("aviso", "investida", "atordoado") or
                (e.tipo in ("morcego", "vespa") and int(t*6)%2==1))
     w,h = MEDIDAS[e.tipo]

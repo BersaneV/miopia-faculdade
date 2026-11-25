@@ -16,7 +16,7 @@ from .memoria import pasta_dados
 from .travessia import Comando, NIVEIS
 
 ESQUEMA = 1
-SIMULACAO = "s07-aranha-1"
+SIMULACAO = "s08-aranha-1"
 MAX_PASSOS = 18_000
 MAX_ARQUIVOS = 32
 MAX_BYTES = 8 * 1024 * 1024
@@ -32,7 +32,7 @@ class HistoricoCheio(OSError):
 def assinatura():
     """A identidade das regras independe das opções de som e do desenho da sala."""
     digest = hashlib.sha256()
-    for nome in ("ensaios", "sala_aranha", "travessia", "combate", "fases", "visao", "narrativa", "subsolo", "descoberta", "missoes", "taticas", "ferramentas",'recursos','raizes_bosque','resgates','jardim','ultimo_chamado'):
+    for nome in ("ensaios", "sala_aranha", "travessia", "combate", "fases", "visao", "narrativa", "subsolo", "descoberta", "missoes", "taticas", "ferramentas",'recursos','raizes_bosque','resgates','jardim','ultimo_chamado','marcas_mapa','luzes_mundo','encontros','tutorial'):
         digest.update(nome.encode("ascii"))
         digest.update(Path(__file__).with_name(nome + ".py").read_bytes())
     return digest.hexdigest()
@@ -47,7 +47,7 @@ def estado(j):
     return {
         "tempo": round(j.tempo, 6), "estado": j.estado,
         "lume": ponto(l.rect.center), "velocidade": ponto((l.vx, l.vy)),
-        "energia": round(l.energia, 4), "vidas": l.vidas, "bolsa": j.bolsa.salvar(j.tempo),
+        "energia": round(l.energia, 4), 'vida':round(l.vida,4), "vidas": l.vidas, "bolsa": j.bolsa.salvar(j.tempo),
         "aranha": ponto(e.rect.center), "vida_aranha": e.vida, "fase_aranha": e.estado,
         "decisoes": e.sequencia, "tecnica": e.tecnica,
         "projeteis": [ponto(projetil.pos) for projetil in e.projeteis],
@@ -122,7 +122,7 @@ class GravacaoAranha:
             else:
                 atingido = "projétil"
             ev = self._evento(jogo, nome, atingido=atingido, tecnica_em_curso=e.tecnica, lume=ponto(jogo.lume.rect.center),
-                              aranha=ponto(e.rect.center), vida_aranha=e.vida, energia=round(jogo.lume.energia, 4))
+                              aranha=ponto(e.rect.center), vida_aranha=e.vida, energia=round(jogo.lume.energia, 4),vida=round(jogo.lume.vida,4))
             if self.primeiro_impacto is None and nome in ("dano","acerto","abatido"):
                 self.primeiro_impacto = ev
 

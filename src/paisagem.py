@@ -119,28 +119,12 @@ def buffer_luz():
 def compor_luz(luz,j,cx,cy,brilho_mata):
     from .visao import fontes
     luz.fill((0,0,0))
-    aux=buffer_luz()
-    terrenos=j.solidos
+    from .luzes_mundo import compor_zonas
+    compor_zonas(luz,j,cx,cy)
     for x,y,raio in fontes(j):
         r=round(raio/8)*8
         if r<8 or x+r<cx or x-r>cx+960 or y+r<cy or y-r>cy+540:continue
-        aux.fill((0,0,0))
-        aux.blit(mascara_luz(r,brilho_mata),(round(x-cx)-r,round(y-cy)-r))
-        for t in terrenos:
-            rect=t.rect
-            if not rect.colliderect(pygame.Rect(x-r,y-r,r*2,r*2)):continue
-            bordas=[]
-            if x<rect.left:bordas.append((rect.topright,rect.bottomright))
-            elif x>rect.right:bordas.append((rect.topleft,rect.bottomleft))
-            if y<rect.top:bordas.append((rect.bottomleft,rect.bottomright))
-            elif y>rect.bottom:bordas.append((rect.topleft,rect.topright))
-            for a,b in bordas:
-                def longe(p):
-                    dx,dy=p[0]-x,p[1]-y
-                    k=2200/max(1.,math.hypot(dx,dy))
-                    return (p[0]+dx*k-cx,p[1]+dy*k-cy)
-                pygame.draw.polygon(aux,(0,0,0),[(a[0]-cx,a[1]-cy),(b[0]-cx,b[1]-cy),longe(b),longe(a)])
-        luz.blit(aux,(0,0),special_flags=pygame.BLEND_RGB_MAX)
+        luz.blit(mascara_luz(r,brilho_mata),(round(x-cx)-r,round(y-cy)-r),special_flags=pygame.BLEND_RGB_MAX)
 
 
 @lru_cache(maxsize=80)
@@ -201,6 +185,22 @@ def sustentar_galho_do_duelo(s,j,cx):
                                                 (px+29,y+13)],1)
 
 
+@lru_cache(maxsize=4)
+def raiz_da_camara(w,h):
+    """Raízes contínuas, sem mosaicos de solo sobre faces verticais estreitas."""
+    out=pygame.Surface((w+44,h+20),pygame.SRCALPHA)
+    for n in range(3):
+        x=23+n*(w-3)/3
+        pts=[(x+math.sin(y*.016+n)*4,y+8) for y in range(0,h+1,9)]
+        pygame.draw.lines(out,(48,53,35),False,pts,13)
+        pygame.draw.lines(out,(112,107,66),False,[(a-2,b) for a,b in pts],3)
+        pygame.draw.lines(out,(153,134,83),False,[(a-4,b) for a,b in pts],1)
+    for y in range(40,h-30,95):
+        lado=-1 if y%2 else 1
+        pygame.draw.lines(out,(80,83,47),False,[(22+w/2,y),(22+w/2+lado*17,y+16),(22+w/2+lado*25,y+43)],4)
+    return out
+
+
 def terreno(s,t,camera,i):
     r=t.rect.move(-round(camera),0)
     if r.right<0 or r.left>960 or t.tipo=="arena": return
@@ -223,6 +223,9 @@ def terreno(s,t,camera,i):
         pygame.draw.rect(s,(162,151,96),r,1)
         return
     if t.tipo in ("vedacao","parede"):
+        if i==1 and r.w<=40 and r.h>350:
+            s.blit(raiz_da_camara(r.w,r.h),(r.x-22,r.y-8))
+            return
         s.blit(rocha_lateral(r.w,r.h,t.tipo,t.rect.x),(r.x-4,r.y))
         return
     if t.tipo=="grade":
@@ -338,6 +341,11 @@ def passagem(s,x,y,subterranea=True):
 
 
 def icone_item(s,item,x,y,w=24,h=24):
+    if item in ('globo','semente_luz'):
+        centro=(round(x),round(y-h*.5))
+        pygame.draw.circle(s,TEAL if item=='globo' else AMBAR,centro,max(3,round(w*.35)),2)
+        pygame.draw.circle(s,AMBAR,centro,3)
+        return
     if item not in ("tanino","polen"):
         sprite(s,"item_"+item,x,y,w,h)
         return
@@ -355,6 +363,9 @@ def icone_item(s,item,x,y,w=24,h=24):
 def objeto(s,o,j,cx,tempo):
     x=o.x-cx
     if not -105<x<1065: return
+    if o.tipo=='lanterna':
+        from .encontros import desenhar
+        desenhar(s,o,j,cx);return
     if o.tipo=='sobrevivente':
         from .arte_resgates import pessoa
         pessoa(s,o,j,cx,tempo)
@@ -588,6 +599,8 @@ class Paisagem:
             for x in (-desloc,1200-desloc): s.blit(margens(i),(x,414))
         from .arte_resgates import luzes
         luzes(s,j,cx,t)
+        from .luzes_mundo import desenhar as globos
+        globos(s,j,cx)
         nivel=min(3,self.brilho_mata+int(j.concluida))
         compor_luz(self.luz,j,cx,cy,nivel)
         aplicar_nevoa(s,self.luz,cy,fundo_visao,nivel)
@@ -615,15 +628,28 @@ class Paisagem:
 def hud(s,j):
     from .cartografia import minimapa, rastro_objetivo
     rastro_objetivo(s,j)
-    painel(s,(19,18,213,64))
-    texto(s,"LUZ",33,23,12,AMBAR,"forte")
-    texto(s,f"{max(0,round(j.lume.energia)):02d}",217,20,20,OSSO,"titulo","right")
-    pygame.draw.rect(s,(50,62,62),(33,49,184,5))
-    pygame.draw.rect(s,AMBAR,(33,49,round(184*max(0,min(100,j.lume.energia))/100),5))
-    for n in range(j.vidas_iniciais): losango(s,38+n*13,67,3,AMBAR,n<j.lume.vidas)
+    from .tutorial import desenhar as ensinar
+    ensinar(s,j)
+    painel(s,(19,18,213,100))
+    texto(s,'VIDA',33,23,12,(210,139,126),'forte')
+    texto(s,f'{max(0,round(j.lume.vida)):02d}',217,20,20,OSSO,'titulo','right')
+    pygame.draw.rect(s,(50,62,62),(33,47,184,5))
+    pygame.draw.rect(s,(204,122,112),(33,47,round(184*max(0,min(100,j.lume.vida))/100),5))
+    texto(s,'BRILHO',33,58,12,AMBAR,'forte')
+    texto(s,f'{max(0,round(j.lume.energia)):02d}',217,55,20,OSSO,'titulo','right')
+    pygame.draw.rect(s,(50,62,62),(33,82,184,5))
+    pygame.draw.rect(s,AMBAR,(33,82,round(184*max(0,min(100,j.lume.energia))/100),5))
+    for n in range(j.vidas_iniciais): losango(s,38+n*13,104,3,AMBAR,n<j.lume.vidas)
     duelo=hasattr(j,"sala_id")
     leitura=f"Avisos   {j.inimigos[0].sequencia}" if duelo else f"Orvalho  {min(j.orvalhos,3)} / 3"
-    texto(s,leitura,217,57,14,PALIDO,"normal","right")
+    texto(s,leitura,217,95,12,PALIDO,"normal","right")
+    if j.lume.energia<=0:texto(s,'Sem brilho · habilidades usam vida',22,159,11,(218,151,132),'forte')
+    if j.lume.abate_ate>j.tempo:
+        hp,br=j.lume.ganho_abate
+        texto(s,f'Abate +{hp:g} vida / +{br:g} brilho',22,175,12,TEAL,'forte')
+    if j.lume.combo_acertos:
+        mult=min(8.,1.25**min(10,j.lume.combo_acertos//3))
+        texto(s,f'Sequência {j.lume.combo_acertos} · retorno {mult:.2f}×',22,210,11,TEAL,'forte')
     painel(s,(682,18,259,64))
     if duelo: local=f"ENSAIO    •    SEMENTE {j.semente}"
     elif j.modo=="historia": local="TRAVESSIA   "+ROMANOS[j.etapa]
@@ -635,17 +661,17 @@ def hud(s,j):
         item=j.bolsa.item
         qtd="ferramenta" if item.permanente and j.bolsa.quantidade else str(j.bolsa.quantidade)
         if item.id=='balsamo':qtd=f'{j.bolsa.quantidade}/{j.bolsa.capacidade_balsamo}'
-        painel(s,(19,86,213,32),False)
-        icone_item(s,item.id,38,115,24,24)
-        texto(s,f"{item.nome}  ·  {qtd}",57,88,13,PALIDO,"forte")
-        texto(s,"Q  trocar   F  usar",57,104,11,PALIDO)
+        painel(s,(19,122,213,32),False)
+        icone_item(s,item.id,38,151,24,24)
+        texto(s,f"{item.nome}  ·  {qtd}",57,124,13,PALIDO,"forte")
+        texto(s,"Q  trocar   F  usar",57,140,11,PALIDO)
         if j.bolsa.tanino_ate>j.tempo:
-            texto(s,f"Tanino ativo · {math.ceil(j.bolsa.tanino_ate-j.tempo)} s",22,122,12,AMBAR,"forte")
+            texto(s,f"Tanino ativo · {math.ceil(j.bolsa.tanino_ate-j.tempo)} s",22,192,12,AMBAR,"forte")
     if getattr(j, 'ensaio_armas', False):
-        nome = 'Agulha · 2 luz / corte' if j.lume.arma.equipamento=='agulha' else 'Espinho · sem custo'
-        painel(s,(19,142,236,44),False)
-        texto(s,nome,30,147,14,AMBAR,'forte')
-        texto(s,'V trocar arma · E no abrigo recupera luz',30,167,10,PALIDO)
+        nome = 'Agulha · alcance longo' if j.lume.arma.equipamento=='agulha' else 'Espinho · cortes rápidos'
+        painel(s,(19,214,236,44),False)
+        texto(s,nome,30,219,14,AMBAR,'forte')
+        texto(s,'V trocar arma · E no abrigo recupera reservas',30,239,10,PALIDO)
 
     if j.boss and not j.boss.vencido:
         painel(s,(258,17,402,64))

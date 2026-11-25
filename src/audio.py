@@ -7,7 +7,7 @@ PASTA=Path(__file__).resolve().parents[1]/"assets"/"sons"
 # Os sinais de perigo, dano e mecanismo têm canais distintos para não se encobrirem.
 ALIASES={"etapa":"abertura","selo":"seiva","chefe_exposto":"vulneravel","chefe_acerto":"acerto",
          "chefe_vencido":"vencer","chefe_resolvido":"vencer","investida":"deslize","parede":"impacto","brasa":"seiva",
-         "vulneravel":"vulneravel","exposto":"vulneravel","madeira":"impacto","barril":"valvula"}
+         "vulneravel":"vulneravel","exposto":"vulneravel","madeira":"impacto","barril":"valvula",'sacrificio':'dano'}
 ALERTAS={"aviso":5,"dano":6,"acerto":7,"sino":8,"impacto":9,"vulneravel":8,
          "raiz":9,"porta":8,"seiva":8,'casco_muda':5,'coruja_muda':5}
 PRESENCA = {"asa_perto", "patas_perto", "sopro_perto", "zurro_perto", "casco_perto", "silvo_perto"}

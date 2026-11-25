@@ -9,7 +9,7 @@ if __package__ in ("",None):
 os.environ.setdefault("SDL_RENDER_SCALE_QUALITY","1")
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT","1")
 import pygame
-from src import telas, ambiental
+from src import telas, ambiental, mapa_visor
 from src.audio import Audio
 from src.ensaios import ENSAIOS, INDICE_ARANHA, SEMENTE_ARANHA, preparar_ensaio
 from src.ilustracao import fonte, original, tinta, linhas
@@ -61,6 +61,10 @@ class App:
         self.bordas=set()
         self.anterior="menu"
         self.pagina=0
+        self.mapa_visor=mapa_visor.Visor()
+        self.mapa_aviso=''
+        self.mapa_aviso_ate=0.
+        self.mapa_tipo=0
         self.pedido_cursor=0
         self.quadro=0
         self.fala=""
@@ -98,6 +102,7 @@ class App:
 
     def mudar(self,nome):
         self.estado=nome
+        self.mapa_visor.arrastando=False
         self.impacto_restante=0.
         self.selecao=0
         self.alvos=[]
@@ -200,9 +205,11 @@ class App:
         if self.ensaio is not None or not j or j.modo!="historia" or j.estado not in ("jogando","caido","vitoria"): return
         if not forcar and self.relogio<self.proximo_save:return
         self.proximo_save=self.relogio+.65
-        assinatura=(j.etapa,j.pontuacao,j.lume.vidas,round(j.lume.energia),j.checkpoint,len(j.diario),
+        assinatura=(j.etapa,j.pontuacao,j.lume.vidas,round(j.lume.energia),round(j.lume.vida),j.checkpoint,len(j.diario),
                     tuple(sorted(j.flags)),j.bolsa.revisao,j.em_vertical,j.marco_vertical,frozenset(j.cartografia),frozenset(j.explorado),j.missao,
-                    j.concluida,tuple((k,v['oficio'],v['premio']) for k,v in sorted(j.sobreviventes.items())))
+                    j.concluida,tuple((k,v['oficio'],v['premio']) for k,v in sorted(j.sobreviventes.items())),
+                    tuple((m['celula'],m['tipo']) for m in j.marcas))
+        assinatura+=(tuple((g['regiao'],g['x'],g['y']) for g in j.globos),frozenset(j.tochas),frozenset(j.nucleos),frozenset(j.tutorial))
         if forcar or assinatura!=self.ultimo_save:
             self.mem_camp=j.salvar()
             self.mem.guardar("campanha",self.mem_camp)
@@ -400,6 +407,7 @@ class App:
         ids=[m.id for m in conhecidas(self.jogo)]
         self.pedido_cursor=ids.index(rastreada(self.jogo).id)
         self.mudar("diario")
+        if not hasattr(self.jogo,'sala_id'):self.mapa_visor.preparar(self.jogo,True)
         self.som("pagina")
 
     def abrir_caderno(self):
@@ -416,6 +424,7 @@ class App:
         if e.type==pygame.WINDOWFOCUSLOST and self.estado=="jogo" and not self.jogo.dialogo:
             self.mudar("pausa")
             return
+        if mapa_visor.evento(self,e):return
         if e.type in (pygame.MOUSEMOTION,pygame.MOUSEBUTTONDOWN):
             if e.type==pygame.MOUSEBUTTONDOWN and e.button!=1: return
             if e.type==pygame.MOUSEBUTTONDOWN and self.estado=="ensaios" and self.selecao==INDICE_ARANHA:
@@ -497,6 +506,7 @@ class App:
             if k in (pygame.K_ESCAPE,pygame.K_TAB,pygame.K_m): self.mudar(self.anterior)
             elif k in (pygame.K_LEFT,pygame.K_RIGHT,pygame.K_a,pygame.K_d):
                 self.pagina=(self.pagina+(-1 if k in (pygame.K_LEFT,pygame.K_a) else 1))%(len(self.jogo.diario)+2+bool(self.jogo.cartografia))
+                self.mapa_visor.arrastando=False
                 self.som("pagina")
         elif est=="pausa" and k in (pygame.K_ESCAPE,pygame.K_p): self.jogar()
         elif est=='registro' and k in (pygame.K_LEFT,pygame.K_RIGHT):
@@ -548,7 +558,8 @@ class App:
                 any(teclas[k] for k in shift) and bool(self.bordas.intersection(direcoes)))
             cmd=Comando(mover,teclas[pygame.K_s] or teclas[pygame.K_DOWN],pygame.K_SPACE in self.bordas,
                         teclas[pygame.K_SPACE],pedir_deslize,
-                        pygame.K_j in self.bordas,pygame.K_k in self.bordas,pygame.K_e in self.bordas)
+                        pygame.K_j in self.bordas,pygame.K_k in self.bordas,pygame.K_e in self.bordas,
+                        pygame.K_l in self.bordas,bool(teclas[pygame.K_LCTRL] or teclas[pygame.K_RCTRL]))
             self.bordas.clear()
             j=self.jogo
             etapa,raizes=j.etapa,j.restauradas
@@ -618,7 +629,7 @@ class App:
                         'jardim' if j.em_vertical and j.lume.rect.centerx>=2432 else
                         'retorno' if j.concluida else CORES_AUDIO[j.etapa])
         self.audio.ambiente(combate=bool(ativo and j.combate),
-                           energia=j.lume.energia if ativo else 100,
+                           energia=j.lume.vida if ativo else 100,
                            raizes=j.restauradas if j else 0,suspenso=not ativo)
         self.audio.atualizar(dt)
 

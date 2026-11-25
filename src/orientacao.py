@@ -195,6 +195,10 @@ def objetivo_atual(j):
     from .jardim import orientar as orientar_jardim
     jardim=orientar_jardim(j)
     if jardim is not None:return jardim
+    if (j.concluida and j.missao in ('principal','resgates','jardim') and
+            len(j.sobreviventes)==3 and 'jardim_plantado' in j.cartografia):
+        return _alvo(j,'colonia_reunida','A colônia reunida','História concluída · explore os pedidos e caminhos restantes',
+                     *j.lume.rect.midbottom,'Os três voltaram e a nascente foi plantada. M abre pedidos conhecidos e marcas pessoais; a floresta continua acessível.',opcional=True)
     from .raizes_bosque import orientar
     raizes=orientar(j)
     if raizes is not None:return raizes

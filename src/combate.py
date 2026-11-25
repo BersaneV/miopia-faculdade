@@ -1,5 +1,5 @@
 """Combate de Lume e percepção, escolha de ataques e deslocamento dos habitantes."""
-from dataclasses import dataclass
+from dataclasses import dataclass,replace
 import math
 from random import Random
 import pygame
@@ -22,6 +22,10 @@ CORTES = {
     "corte2": Corte(.04, .14, .29, 77, 1),
     "corte3": Corte(.075, .17, .42, 85, 2),
     "queda": Corte(.035, .24, .39, 54, 2),
+    'pesado':Corte(.11,.18,.46,96,2),
+    'quebra':Corte(.14,.20,.56,108,3),
+    'retorno':Corte(.055,.16,.35,82,2),
+    'aurora':Corte(.09,.21,.49,106,3),
 }
 
 # O segundo perfil fica restrito à oficina de armas até o parecer humano.
@@ -33,6 +37,8 @@ AGULHA = {
     'queda': Corte(.09, .24, .50, 75, 3),
 }
 ARMAS = {'espinho': CORTES, 'agulha': AGULHA}
+AGULHA.update({n:replace(CORTES[n],alcance=CORTES[n].alcance+25,total=CORTES[n].total+.08) for n in ('pesado','quebra','retorno','aurora')})
+LUZ_ARMAS={nome:{n:replace(p,dano=p.dano*2,alcance=p.alcance+16) for n,p in perfis.items()} for nome,perfis in ARMAS.items()}
 
 
 class Arma:
@@ -49,15 +55,18 @@ class Arma:
         self.pedir_avanco = False
         self.rebote = 0.
         self.equipamento = 'espinho'
+        self.historico=[];self.luminoso=False
+        self.pedir_forte=self.pedir_luminoso=False
 
     @property
     def perfil(self):
-        return ARMAS[self.equipamento][self.tipo] if self.tipo else None
+        return (LUZ_ARMAS if self.luminoso else ARMAS)[self.equipamento][self.tipo] if self.tipo else None
 
     def cancelar(self):
         self.tipo = ''
         self.pedido = self.intervalo = 0.
         self.combo = 0
+        self.historico=[];self.luminoso=False
 
     def trocar(self):
         if self.tipo or self.pedido > 0:
@@ -67,10 +76,14 @@ class Arma:
         self.intervalo = 0.
         return True
 
-    def pedir(self, queda, avanco=False):
+    def pedir(self, queda, avanco=False,forte=False,luminoso=False):
         self.pedido = .22
         self.pedir_queda = queda
         self.pedir_avanco = avanco
+        self.pedir_forte=forte;self.pedir_luminoso=luminoso
+
+    def clarao(self):
+        self.historico=(self.historico+['K'])[-3:];self.intervalo=max(self.intervalo,.9)
 
     def avancar(self, dt, lume):
         self.rebote = max(0., self.rebote - dt)
@@ -86,15 +99,22 @@ class Arma:
             baixo = self.pedir_queda and not lume.chao
             self.combo = 0 if baixo else (self.combo % 3 + 1 if self.intervalo > 0 else 1)
             self.tipo = "queda" if baixo else "corte" + str(self.combo)
-            if self.pedir_avanco and lume.chao and lume.energia >= (10 if self.equipamento == 'agulha' else 8):
+            self.historico=(self.historico if self.intervalo>0 else [])+['L' if self.pedir_forte else 'J']
+            self.historico=self.historico[-3:]
+            seq=''.join(self.historico)
+            if not baixo:
+                if self.pedir_forte:self.tipo='aurora' if seq.endswith('KL') else 'quebra' if seq.endswith('JL') else 'pesado'
+                elif seq.endswith(('LJ','KJ')):self.tipo='retorno'
+            if self.pedir_avanco and lume.chao:
                 self.tipo="avanco"
-            custo = (10 if self.equipamento == 'agulha' else 8) if self.tipo == 'avanco' else (2 if self.equipamento == 'agulha' else 0)
-            if lume.energia < custo:
+            self.luminoso=self.pedir_luminoso
+            custo=(14 if self.pedir_forte else 12 if self.tipo=='avanco' else 8) if self.luminoso else 0
+            custo*=getattr(lume,'fator_custo_luz',1.)
+            if not lume.gastar_brilho(custo):
                 self.pedido = 0.
                 self.tipo = ''
                 lume.golpe = 0.
                 return False
-            lume.energia -= custo
             self.tempo = 0.
             self.face = lume.face
             self.serie += 1
@@ -203,6 +223,7 @@ class Inimigo:
         self.repor()
 
     def repor(self):
+        self.vida=self.max_vida
         self.rect.midbottom = self.origem
         self.estado = "patrulha"
         self.tecnica = ""
@@ -226,6 +247,7 @@ class Inimigo:
         self.destino_recuo = Vetor(self.rect.center)
         self.resistencia_leve = 0.
         self.lentidao = 0.
+        self.cego=0.
         self.recuo_ferida = False
 
     def mover(self, dx, dy, terrenos):
@@ -333,6 +355,7 @@ class Inimigo:
         return "onda" if abs(dx) < 97 or lume.rect.bottom < self.rect.top else "carga"
 
     def preparar(self, lume, terrenos=()):
+        if self.cego>0:self.t=.12;return ''
         self.tecnica = self.escolher(lume.rect.centerx - self.rect.centerx, lume, terrenos)
         if not self.tecnica:
             self.t = .20  # Sem ataque viável, reavaliar depois de reposicionar.
@@ -422,6 +445,7 @@ class Inimigo:
 
     def update(self, dt, lume, raio, restaurado, terrenos):
         """Entrega os avisos com posição no mundo e o eventual impacto no jogador."""
+        self.cego=max(0.,self.cego-dt)
         sons = []
         dano = False
         lenta=self.lentidao>0
