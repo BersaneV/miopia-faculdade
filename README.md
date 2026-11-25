@@ -24,14 +24,14 @@ Ver a travessia em movimento.
 | Comando | Ação |
 |---|---|
 | A / D ou setas esquerda e direita | Mover |
-| Espaço | Saltar. Solte e aperte outra vez no ar para o salto duplo. Segure durante a queda para planar por até 1,12 s. Pousar recupera as asas. Encostado à parede riscada, o novo toque impulsiona Lume para o lado oposto. |
+| Espaço | Saltar. Solte e aperte outra vez no ar para o salto duplo. Segure durante a queda para planar continuamente. Encostado ao tronco de impulso, o novo toque lança Lume para o lado oposto. |
 | S ou seta para baixo | Agachar. Segure para baixo e aperte Espaço sobre grade, galho elevado ou apoio para passar ao nível inferior. Terra e pontes firmes sustentam Lume. |
 | Shift + direção | Deslizar |
 | E | Usar mecanismos, subir cordas, descansar e conversar |
 | J / S + J no ar | Até três cortes em sequência; ataque para baixo com rebote ao acertar. Cortes também interceptam fios e ferrões. |
 | K | Clarão fixo no mundo, ao custo de 22 de luz. |
 | Q / F | Alternar item / usar o item escolhido (bálsamo, pavio, casulo ou concha). |
-| Tab | Abrir o diário, o mapa dos biomas e o traçado local |
+| Tab | Abrir diretamente o mapa local com o objetivo. As setas mudam para o diário e os demais mapas. |
 | P ou Esc | Pausar ou continuar. R na pausa pede confirmação para retornar ao marco. |
 | M / F11 | Silenciar ou reativar som / alternar tela cheia |
 | Setas e Enter, ou mouse | Escolher nos menus. Enter completa a fala e avança. Esc pula o prólogo. |

@@ -50,7 +50,9 @@ def margens(i):
     return surf
 
 
-SOMBRAS = ((19, 25, 37), (33, 42, 53), (55, 65, 78), (79, 88, 98))
+# Fora dos halos a mata perde também o chão, o fundo e as estruturas. Os dois
+# níveis mais claros são ajustes de acessibilidade, não luz de cenário gratuita.
+SOMBRAS = ((0, 1, 2), (3, 5, 8), (18, 25, 33), (61, 70, 82))
 
 
 @lru_cache(maxsize=80)
@@ -69,21 +71,28 @@ def mascara_luz(raio, brilho_mata):
 
 @lru_cache(maxsize=80)
 def rocha_lateral(w, h, tipo, semente):
-    # A largura visual acompanha a face que recebe a colisão.
+    # Casca e nós verticais unem a parede de impulso à vegetação. A face útil
+    # continua alinhada à colisão; os ramos decorativos não fingem plataformas.
     rng = random.Random(semente + h*5 + w)
     surf = pygame.Surface((w+10,h+4),pygame.SRCALPHA)
     esq = [(rng.randrange(1,6),y) for y in range(0,h,16)] + [(4,h)]
     direita = [(w+rng.randrange(1,6),y) for y in range(0,h,16)] + [(w+5,h)]
-    pygame.draw.polygon(surf,(48,52,53),esq + list(reversed(direita)))
-    pygame.draw.lines(surf,(105,119,113),False,esq,2)
-    pygame.draw.lines(surf,(95,94,83),False,direita,2)
-    for y in range(9,h-5,13):
-        x = rng.randint(4,max(4,w//2))
-        pygame.draw.lines(surf,(77,79,75),False,[(4,y+2),(x,y-3),(w,y+4)],2)
-        if tipo == "parede" and y%3 != 0:
-            # Cicatrizes claras nas duas faces são a linguagem visual de impulso.
-            pygame.draw.line(surf,(186,168,114),(3,y+4),(min(w,12),y-3),2)
-            pygame.draw.line(surf,(186,168,114),(w-8,y+6),(w+2,y-2),2)
+    pygame.draw.polygon(surf,(65,51,35),esq + list(reversed(direita)))
+    pygame.draw.lines(surf,(133,124,77),False,esq,2)
+    pygame.draw.lines(surf,(101,86,59),False,direita,2)
+    for x in range(7,w,9):
+        curva=[(x+round(math.sin(y*.037+x)*2),y) for y in range(2,h,6)]
+        if len(curva)>1:
+            pygame.draw.lines(surf,(91,70,44) if x%3 else (42,37,29),False,curva,2)
+    for y in range(24,h-11,71):
+        x=rng.randint(8,max(8,w-9))
+        pygame.draw.ellipse(surf,(36,34,26),(x-5,y-9,11,23),2)
+        pygame.draw.ellipse(surf,(120,93,58),(x-3,y-5,7,15),1)
+        if tipo=="parede":
+            for lado in (3,w+1):
+                # Pequenos brotos e casca clara marcam as faces de salto.
+                pygame.draw.line(surf,(156,159,101),(lado,y+18),(lado,y+30),2)
+                pygame.draw.line(surf,(104,143,80),(lado,y+24),(lado+(-4 if lado==3 else 4),y+20),2)
     return surf
 
 
@@ -217,17 +226,51 @@ def mata_reacesa(s,j,cx,t):
 
 
 
+def passagem(s,x,y,subterranea=True):
+    """Escada escavada na raiz, com soleira e profundidade reconhecíveis."""
+    x,y=round(x),round(y)
+    contorno=[(x-37,y),(x-30,y-59),(x-13,y-77),(x+24,y-68),(x+37,y)]
+    pygame.draw.polygon(s,(47,39,29),contorno)
+    pygame.draw.polygon(s,(10,15,14),[(x-24,y),(x-19,y-53),(x-10,y-64),(x+17,y-57),(x+24,y)])
+    pygame.draw.lines(s,(117,95,58),False,contorno,3)
+    for lado in (-1,1):
+        pygame.draw.lines(s,(80,70,44),False,[(x+lado*31,y-4),(x+lado*43,y+3),(x+lado*57,y+6)],5)
+        pygame.draw.lines(s,(137,124,73),False,[(x+lado*28,y-18),(x+lado*33,y-53),(x+lado*16,y-68)],1)
+    for n in range(4):
+        py=y-7-n*9
+        largura=23-n*3
+        pygame.draw.line(s,(88-n*12,83-n*10,57-n*7),(x-largura,py),(x+largura,py),3)
+    for px,py in ((x-27,y-52),(x+17,y-67),(x+36,y-14)):
+        pygame.draw.ellipse(s,(87,112,64),(px-6,py-4,12,5))
+    # Uma seta talhada numa placa de casca distingue a escada de um portal.
+    pygame.draw.polygon(s,(78,68,44),[(x-17,y-49),(x+14,y-49),(x+17,y-32),(x-14,y-33)])
+    d=1 if subterranea else -1
+    pygame.draw.line(s,AMBAR,(x,y-43),(x,y-37),1)
+    pygame.draw.lines(s,AMBAR,False,[(x-4,y-40),(x,y-40+d*4),(x+4,y-40)],1)
+
+
 def objeto(s,o,j,cx,tempo):
     x=o.x-cx
     if not -105<x<1065: return
     if o.tipo=="fenda":
-        y=o.y
-        pygame.draw.ellipse(s,(12,20,24),(x-40,y-63,80,68))
-        for lado in (-1,1):
-            pygame.draw.lines(s,(90,96,76),False,[(x+lado*40,y),(x+lado*33,y-32),(x+lado*17,y-54),(x,y-62)],4)
-        brilho(s,(x,y-31),19)
-        pygame.draw.lines(s,AMBAR,False,[(x-6,y-40),(x,y-46),(x+6,y-40)],2)
-        pygame.draw.lines(s,PALIDO,False,[(x-6,y-26),(x,y-20),(x+6,y-26)],2)
+        passagem(s,x,o.y)
+        if abs(o.x-j.lume.rect.centerx)<140:
+            texto(s,"Desvio da figueira",x,o.y-99,13,PALIDO,"forte","centerx")
+        return
+    if o.tipo=="reliquia":
+        y=o.y-17+round(math.sin(tempo*2)*2)
+        brilho(s,(x,y),25)
+        if "asa" in o.id:
+            for lado in (-1,1):
+                pts=[(x,y+7),(x+lado*23,y-8),(x+lado*17,y-19),(x+lado*5,y-8)]
+                pygame.draw.polygon(s,(158,188,151),pts)
+                pygame.draw.lines(s,(232,221,168),False,[pts[0],pts[2]],1)
+        elif "resina" in o.id:
+            pygame.draw.polygon(s,(163,103,39),[(x,y-23),(x-11,y+3),(x-5,y+12),(x+8,y+10),(x+12,y+1)])
+            pygame.draw.lines(s,AMBAR,False,[(x-3,y-7),(x-6,y+3),(x-2,y+7)],2)
+        else:
+            pygame.draw.polygon(s,(124,149,112),[(x-17,y+11),(x+13,y-21),(x+6,y+8)])
+            pygame.draw.line(s,OSSO,(x-11,y+8),(x+12,y-19),1)
         return
     if o.tipo=="npc":
         w,h=NPC_TAM[o.nome]
@@ -307,6 +350,7 @@ class Paisagem:
         self.ultimo_tempo=None
         self.ultimo_jogo=None
         self.lampejos=()
+        self.mundo=pygame.Surface((960,620))
 
     def ecos(self,s,j,cx):
         # Datas pertencem ao relógio da partida; abrir o diário congela as partículas.
@@ -349,11 +393,30 @@ class Paisagem:
             from .corte_vertical import desenhar_vertical
             desenhar_vertical(s,j,t,self.brilho_mata)
             return
+        destino=s
+        altura=max(620,getattr(j,"altura_mundo",540)+80)
+        if self.mundo.get_height()!=altura:
+            self.mundo=pygame.Surface((960,altura))
+        s=self.mundo
+        cy=round(j.camera_y)
+        recorte=pygame.Rect(0,cy,960,540)
+        s.set_clip(recorte)
         i,cx=j.etapa,j.camera
-        s.blit(fundo(i),(-int(cx/(j.fase.width-960)*310),-108))
+        s.blit(fundo(i),(-int(cx/max(1,j.fase.width-960)*310),cy-108))
+        if cy>60:
+            # As raízes cobrem progressivamente o céu ao descer, no mesmo mundo.
+            sub=pygame.Surface((960,540))
+            sub.fill((23,29,24))
+            for n in range(14):
+                x=(n*107-int(cx*.32))%1050-45
+                pts=[(x+round(math.sin(y*.009+n)*25),y) for y in range(-40,580,12)]
+                pygame.draw.lines(sub,(41+n%3*5,41+n%3*4,30),False,pts,13+n%4*5)
+                pygame.draw.lines(sub,(60,57,37),False,[(x-4,y) for x,y in pts],1)
+            sub.set_alpha(min(255,round((cy-60)*1.1)))
+            s.blit(sub,(0,cy))
         for n in range(28):
             x=(n*97-cx*.31+math.sin(n+t*.31)*10)%980-10
-            y=70+(n*47+t*(2+n%3))%365
+            y=cy+70+(n*47+t*(2+n%3))%365
             pygame.draw.circle(s,(146,163,142),(int(x),int(y)),1)
         if i==1:
             nivel=423 if "dreno" in j.flags else 353
@@ -373,6 +436,10 @@ class Paisagem:
                 inimigo(s,e,cx,j.lume,t)
         if j.boss:
             j.boss.desenhar(s,cx)
+        # O primeiro plano também faz parte da mata e recebe a mesma sombra.
+        desloc=int(cx*1.16)%1200
+        if cy<180:
+            for x in (-desloc,1200-desloc): s.blit(margens(i),(x,414))
         self.luz.fill(SOMBRAS[self.brilho_mata])
         fontes = [(j.lume.rect.centerx,j.lume.rect.centery,j.raio)]
         fontes.extend((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios)
@@ -380,9 +447,9 @@ class Paisagem:
             r=round(raio/4)*4
             if r<4 or x+r<cx or x-r>cx+960:
                 continue
-            self.luz.blit(mascara_luz(r,self.brilho_mata),(round(x-cx)-r,round(y)-r),
+            self.luz.blit(mascara_luz(r,self.brilho_mata),(round(x-cx)-r,round(y-cy)-r),
                           special_flags=pygame.BLEND_RGB_MAX)
-        s.blit(self.luz,(0,0),special_flags=pygame.BLEND_RGB_MULT)
+        s.blit(self.luz,(0,cy),special_flags=pygame.BLEND_RGB_MULT)
         for v in j.vestigios:
             if v.raio(j.tempo)>16:
                 xy=(round(v.x-cx),round(v.y))
@@ -400,11 +467,13 @@ class Paisagem:
         if j.boss: sinais_encontro(s,j.boss,cx)
         lume(s,j.lume,cx,t)
         self.ecos(s,j,cx)
-        desloc=int(cx*1.16)%1200
-        for x in (-desloc,1200-desloc): s.blit(margens(i),(x,414))
+        destino.blit(s,(0,0),recorte)
+        s.set_clip(None)
 
 
 def hud(s,j):
+    from .cartografia import minimapa, rastro_objetivo
+    rastro_objetivo(s,j)
     painel(s,(19,18,213,64))
     texto(s,"LUZ",33,23,12,AMBAR,"forte")
     texto(s,f"{max(0,round(j.lume.energia)):02d}",217,20,20,OSSO,"titulo","right")
@@ -432,10 +501,13 @@ def hud(s,j):
         painel(s,(258,17,402,64))
         texto(s,j.boss.nome,459,22,23,OSSO,"titulo","centerx")
         for n in range(j.boss.meta): losango(s,453+n*14,63,4,AMBAR,n<j.boss.progresso)
+    if not duelo:
+        minimapa(s,j)
     if j.interacao and not j.dialogo:
         msg="E   "+j.interacao
         cx=max(165,min(795,j.lume.rect.centerx-j.camera))
-        y=max(122,min(365,j.lume.rect.top-j.camera_y-62))
+        minimo=182 if j.boss and not j.boss.vencido else 122
+        y=max(minimo,min(365,j.lume.rect.top-j.camera_y-62))
         for teto in (() if j.em_vertical else j.fase.tetos):
             x_teto,y_teto,largura,altura=teto
             if x_teto-16 < j.lume.rect.centerx < x_teto+largura+16 and j.lume.rect.top >= y_teto+altura-3:
@@ -445,7 +517,8 @@ def hud(s,j):
         texto(s,msg,cx,y+3,15,OSSO,"forte","centerx")
     if j.dialogo: return
     s.blit(placa(960,52,225),(0,488))
-    texto(s,"DIÁRIO  [TAB]",937,505,13,PALIDO,"forte","right")
-    texto(s,j.objetivo,22,491,17,OSSO,"forte")
+    texto(s,"MAPA  [TAB]",937,505,13,PALIDO,"forte","right")
+    from .cartografia import texto_curto
+    texto(s,texto_curto(j.objetivo,790,17,"forte"),22,491,17,OSSO,"forte")
     info=j.aviso if j.aviso_t>0 and j.aviso!=j.fase.name else j.dica_local
-    texto(s,info,22,516,14,PALIDO)
+    texto(s,texto_curto(info,790,14),22,516,14,PALIDO)

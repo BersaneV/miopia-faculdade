@@ -1,6 +1,7 @@
 """Combate de Lume e percepção, escolha de ataques e deslocamento dos habitantes."""
 from dataclasses import dataclass
 import math
+from random import Random
 import pygame
 
 Vetor = pygame.Vector2
@@ -93,7 +94,7 @@ class Especie:
 
 ESPECIES = {
     "morcego": Especie(3, (41, 27), 228, .53, 385, "asa_perto"),
-    "aranha": Especie(4, (49, 27), 255, .60, 276, "patas_perto"),
+    "aranha": Especie(6, (49, 27), 255, .60, 276, "patas_perto"),
     "sombra": Especie(4, (37, 35), 210, .72, 305, "sopro_perto"),
     "vespa": Especie(3, (41, 28), 287, .53, 370, "zurro_perto"),
     "carabideo": Especie(5, (58, 37), 251, .68, 370, "casco_perto"),
@@ -140,7 +141,7 @@ class Projetil:
 
 
 class Inimigo:
-    def __init__(self, tipo, x, y, dificuldade="normal"):
+    def __init__(self, tipo, x, y, dificuldade="normal", *, semente=None):
         self.tipo, self.origem = tipo, (x, y)
         self.ficha = ESPECIES[tipo]
         self.dificuldade = dificuldade
@@ -153,6 +154,9 @@ class Inimigo:
         self.guarda = False
         self.rect = pygame.FRect(0, 0, *self.ficha.tamanho)
         self.ultimo_corte = -1
+        # A posição identifica indivíduos da campanha. O ensaio fornece sua
+        # semente explicitamente; desenho e som nunca consomem este gerador.
+        self.semente = f"aranha/{x}/{y}/{dificuldade}/{semente}"
         self.repor()
 
     def repor(self):
@@ -172,13 +176,20 @@ class Inimigo:
         self.flash = 0.
         self.projeteis = []
         self.ultimo_corte = -1
+        self.sorte = Random(self.semente)
+        self.ultima_tecnica = ""
+        self.repeticoes = 0
+        self.pesos_decisao = {}
+        self.destino_recuo = Vetor(self.rect.center)
+        self.resistencia_leve = 0.
+        self.recuo_ferida = False
 
     def mover(self, dx, dy, terrenos):
         """O raio da busca é local; paredes e bordas limitam a perseguição terrestre."""
         novo = self.rect.copy()
         novo.x += dx
         if not any(not t.atravessavel and t.rect.colliderect(novo) for t in terrenos):
-            if self.tipo in AEREOS or self.tecnica == "salto" or not terrenos:
+            if self.tipo in AEREOS or (self.tecnica == "salto" and self.estado == "investida") or not terrenos:
                 self.rect.x = novo.x
             else:
                 frente = novo.right - 1 if dx > 0 else novo.left + 1
@@ -203,24 +214,95 @@ class Inimigo:
             return self.ficha.percepcao * .68
         return self.ficha.percepcao
 
-    def escolher(self, dx, lume):
+    def alvo_observado(self, lume):
+        previsao = max(-40., min(40., lume.vx*.16))
+        return Vetor(lume.rect.centerx + previsao, lume.rect.centery)
+
+    def salto_livre(self, alvo, terrenos):
+        """Confere o mesmo arco usado pelo ataque, com espaço para o corpo.
+
+        Segmentos curtos varrem o volume entre amostras, incluindo paredes
+        finas e tetos. O apoio final precisa caber sob ambos os lados do corpo.
+        """
+        if not terrenos:
+            return True
+        inicio = Vetor(self.rect.center)
+        destino = Vetor(alvo.x, inicio.y)
+        base = self.rect.bottom
+        if not all(any(t.rect.collidepoint(x, base+2) for t in terrenos)
+                   for x in (destino.x-self.rect.w*.35, destino.x+self.rect.w*.35)):
+            return False
+        anterior = inicio
+        for n in range(1, 33):
+            fase = n/32
+            ponto = inicio.lerp(destino, fase)
+            ponto.y -= math.sin(fase*math.pi)*49
+            for t in terrenos:
+                if t.atravessavel:
+                    continue
+                volume = pygame.FRect(t.rect).inflate(self.rect.w-.1, self.rect.h-.1)
+                if volume.clipline(anterior, ponto):
+                    return False
+            anterior = ponto
+        return True
+
+    def pesos_aranha(self, dx, lume, terrenos=()):
+        """Afinidades do atlas, normalizadas somente entre ataques possíveis.
+
+        A memória reduz uma repetição a 45% do peso, ou 20% após duas.
+        Com uma única opção a memória não interfere. Zero nunca é sorteado.
+        """
+        distancia = abs(dx)
+        alvo = self.alvo_observado(lume)
+        visivel = not segmento_bloqueado(self.rect.center, lume.rect.center, terrenos)
+        fio = (65 <= distancia <= 260 and visivel
+               and not segmento_bloqueado(self.rect.center, alvo, terrenos))
+        salto = (distancia <= 150 and abs(lume.rect.centery-self.rect.centery) <= 65
+                 and visivel and self.salto_livre(alvo, terrenos))
+        pesos = {
+            "fio": max(0., 1-abs(distancia-150)/160) if fio else 0.,
+            "salto": .95*max(0., 1-abs(distancia-65)/95) if salto else 0.,
+        }
+        if sum(p > 0 for p in pesos.values()) > 1 and self.ultima_tecnica in pesos:
+            pesos[self.ultima_tecnica] *= .20 if self.repeticoes >= 2 else .45
+        return pesos
+
+    def escolher(self, dx, lume, terrenos=()):
         if self.tipo == "morcego":
             return "rasante" if self.sequencia % 2 else "mergulho"
         if self.tipo == "aranha":
-            return "fio" if abs(dx) > 103 else "salto"
+            self.pesos_decisao = self.pesos_aranha(dx, lume, terrenos)
+            total = sum(self.pesos_decisao.values())
+            if total <= 0:
+                return ""
+            sorteio = self.sorte.random()*total
+            acumulado = 0.
+            for tecnica, peso in self.pesos_decisao.items():
+                acumulado += peso
+                if peso > 0 and sorteio < acumulado:
+                    return tecnica
+            return ""  # Total finito positivo sempre encontra um intervalo.
         if self.tipo == "vespa":
             return "mergulho" if abs(dx) < 78 else "ferrao"
         if self.tipo == "sombra":
             return "fenda" if abs(dx) > 84 or self.sequencia % 2 == 0 else "rasteira"
         return "onda" if abs(dx) < 97 or lume.rect.bottom < self.rect.top else "carga"
 
-    def preparar(self, lume):
-        self.tecnica = self.escolher(lume.rect.centerx - self.rect.centerx, lume)
+    def preparar(self, lume, terrenos=()):
+        self.tecnica = self.escolher(lume.rect.centerx - self.rect.centerx, lume, terrenos)
+        if not self.tecnica:
+            self.t = .20  # Sem ataque viável, reavaliar depois de reposicionar.
+            return ""
+        if self.tipo == "aranha":
+            self.repeticoes = self.repeticoes+1 if self.tecnica == self.ultima_tecnica else 1
+            self.ultima_tecnica = self.tecnica
         self.sequencia += 1
         self.frente = 1 if lume.rect.centerx >= self.rect.centerx else -1
-        previsao = max(-40., min(40., lume.vx*.16))
-        self.alvo = Vetor(lume.rect.centerx + previsao, lume.rect.centery)
+        self.alvo = self.alvo_observado(lume)
         self.inicio = Vetor(self.rect.center)
+        if self.tipo == "aranha":
+            self.destino_recuo = Vetor(max(self.origem[0]-130,
+                min(self.origem[0]+130, self.rect.centerx-self.frente*42)), self.rect.centery)
         if self.tecnica == "rasante":
             self.alvo.y = lume.rect.bottom - 42
         if self.tecnica == "fenda":
@@ -286,6 +368,12 @@ class Inimigo:
         elif self.tipo == "sombra" and distancia < 240:
             # A sombra cerca a trilha sem se teletransportar para cima do jogador.
             destino.x = x + max(-102, min(102, lume.rect.centerx-x+self.frente*45))
+        elif (self.tipo == "aranha" and distancia < self.ficha.percepcao
+              and not segmento_bloqueado(self.rect.center, lume.rect.center, terrenos)):
+            # Fecha espaço para manter as duas técnicas úteis. Não persegue
+            # posição escondida e a verificação de apoio impede cair de bordas.
+            face = 1 if lume.rect.centerx >= self.rect.centerx else -1
+            destino.x = x + max(-130, min(130, lume.rect.centerx-x-face*102))
         self.seguir(destino, 94 if self.tipo in AEREOS else 62, dt, terrenos)
 
     def update(self, dt, lume, raio, restaurado, terrenos):
@@ -295,6 +383,7 @@ class Inimigo:
         self.relogio += dt
         self.t -= dt
         self.flash = max(0., self.flash - dt)
+        self.resistencia_leve = max(0., self.resistencia_leve-dt)
         self.chamada -= dt
         distancia = Vetor(self.rect.center).distance_to(lume.rect.center)
         if distancia <= 330 and self.chamada <= 0:
@@ -304,7 +393,9 @@ class Inimigo:
             self.patrulhar(lume, distancia, dt, terrenos)
             if (self.t <= 0 and distancia < self.alcance(lume, raio, restaurado)
                     and not segmento_bloqueado(self.rect.center, lume.rect.center, terrenos)):
-                sons.append((self.preparar(lume), self.rect.centerx))
+                aviso = self.preparar(lume, terrenos)
+                if aviso:
+                    sons.append((aviso, self.rect.centerx))
         elif self.estado == "aviso":
             if self.tecnica == "rasante":
                 # O segundo ataque nivela as asas numa faixa alta. Agachado, Lume
@@ -316,15 +407,16 @@ class Inimigo:
         elif self.estado == "investida":
             dano = self.executar_ataque(dt, lume, terrenos)
         elif self.estado == "recuo":
-            destino = (self.origem[0], self.origem[1]-self.rect.h/2)
-            self.seguir(destino, 186, dt, terrenos)
+            destino = self.destino_recuo if self.tipo == "aranha" else (self.origem[0], self.origem[1]-self.rect.h/2)
+            self.seguir(destino, 460 if self.recuo_ferida else 186, dt, terrenos)
             if self.t <= 0:
-                self.estado, self.t = "patrulha", .24
+                self.estado, self.t = "patrulha", 0. if self.recuo_ferida else .24
+                self.recuo_ferida = False
         elif self.estado == "atordoado":
             self.mover(self.tranco * dt, 0, terrenos)
             self.tranco *= max(0., 1-9*dt)
             if self.t <= 0:
-                self.estado, self.t = "recuo", .28
+                self.estado, self.t = "recuo", .38 if self.recuo_ferida else .28
         return sons, dano
 
     def acertar(self, arma, area, clarao, lume):
@@ -340,11 +432,23 @@ class Inimigo:
         self.flash = .20
         if blindado:
             return "bloqueio"
-        self.vida -= 2 if pulso else CORTES[arma.tipo].dano
+        self.vida -= 2 if pulso else CORTES[arma.tipo].dano*getattr(lume, "bonus_dano", 1.)
         self.ativo = self.vida > 0
         if not self.ativo:
             self.projeteis.clear()
             return "abatido"
+        if self.tipo == "aranha" and not pulso and arma.tipo in ("corte1", "corte2"):
+            # O aviso comprometido continua legível mesmo sob golpes leves.
+            # Fora dele, um flinch abre uma janela curta sem poder ser renovado
+            # a cada tecla. Terceiro corte, queda e clarão sempre interrompem.
+            if self.estado in ("aviso", "investida") or self.resistencia_leve > 0:
+                return "acerto"
+        if self.tipo == "aranha":
+            self.resistencia_leve = .95
+            self.recuo_ferida = True
+            lado = 1 if self.rect.centerx >= lume.rect.centerx else -1
+            self.destino_recuo = Vetor(max(self.origem[0]-260, min(self.origem[0]+260,
+                self.rect.centerx+lado*200)), self.origem[1]-self.rect.h/2)
         self.estado, self.t = "atordoado", .79 if pulso else .19
         self.tranco = (98 if arma.tipo == "corte3" else 61) * (1 if self.rect.centerx >= lume.rect.centerx else -1)
         return "acerto"

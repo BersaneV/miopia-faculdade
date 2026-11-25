@@ -101,12 +101,13 @@ FASES = (
          O("dreno", "valvula", 432, 374, "Drenar o canal"),
          O("lingueta", "peca", 982, CHAO, "Recolher a lingueta"),
          O("ponte", "valvula", 1295, CHAO, "Soltar a ponte")),
-        {"dreno": M("", "", "A água desce. Sob a raiz, a corrente ainda corre para trás.", ("valvula", "agua")),
-         "lingueta": M("dreno", "O canal ainda cobre a lingueta.", "A lingueta de Casca cabe no segundo carretel.", ("coleta",)),
-         "ponte": M("lingueta", "Falta a lingueta. Ela ficou presa sob a raiz baixa.",
-                    "A ponte se estende. Por baixo, o ralo da segunda comporta ainda geme.", ("valvula", "corda", "porta"))},
-        "ponte", (("dreno", "Drene o canal na válvula elevada"), ("lingueta", "Deslize contra a corrente e recolha a lingueta"),
-                  ("ponte", "Solte a ponte com a segunda válvula")),
+        {"dreno": M("", "", "Canal drenado. Deslize sob a raiz à direita e recolha a lingueta com E.", ("valvula", "agua")),
+         "lingueta": M("dreno", "Primeiro gire a roda do dreno, no primeiro galho acima de Casca.",
+                       "Lingueta recolhida. A roda da ponte fica no chão, depois de Fio e antes do vão.", ("coleta",)),
+         "ponte": M("lingueta", "Falta a lingueta sob a raiz baixa à esquerda. Drene o canal para recolhê-la.",
+                    "Ponte estendida. A amarra liberou o ralo do outro lado; desça pela grade depois do marco.", ("valvula", "corda", "porta"))},
+        "ponte", (("dreno", "Gire a roda do primeiro galho, acima de Casca"), ("lingueta", "Deslize sob a raiz baixa e recolha a lingueta"),
+                  ("ponte", "Use a lingueta na roda da ponte, depois de Fio")),
         (("aranha", 1610, CHAO),),
         ((285, 416), (418, 347), (740, 216), (805, 416), (1130, 415), (1668, 414)),
         ("Nível antigo", "No fundo, dois sulcos de água. Um alimentava a borda; o outro, mais recente, dobra rumo à figueira."),
@@ -222,7 +223,12 @@ RAMAIS = (
 
 def ampliar(fase, ramal):
     objeto = ramal.objetivo
-    pendencia = "Falta preparar o primeiro trecho. " + fase.passos[-1][1] + "."
+    pendencia = {
+        "peca": "A peça da porteira fica no galho alto do Bosque. Baixe a corda no carretel e recolha a peça.",
+        "ponte": "A amarra ainda prende o ralo. A roda da ponte fica à esquerda, na superfície do Córrego, depois de Fio e antes do vão.",
+        "brasa": "A brasa fica no galho da outra margem do primeiro vão. Acenda o nó de Eco para alcançar os apoios.",
+        "contrapeso": "Solte o contrapeso no estrado alto da Gruta. A roldana dos primeiros galhos baixa a corda até ele.",
+    }[fase.preparo]
     mecanismo = M(fase.preparo, pendencia, ramal.efeito, ("raiz", "porta"))
     return replace(fase,
         pisos=tuple((a, min(b,1780)) for a,b in fase.pisos if a<1780) + ramal.pisos,

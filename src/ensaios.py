@@ -35,6 +35,8 @@ ENSAIOS = (
            "Entre pela direita. Observe a altura da asa antes de escolher entre agachar e saltar. A raiz riscada expõe o dorso."),
     Ensaio("Tecelã do Vão",1,(ARENA-20,CHAO),("meio","marco","dreno","lingueta","ponte",FASES[1].preparo),
            "Entre pela direita. Observe as duas trajetórias de seda depois do primeiro corte. A roda a oeste abre a cortina de água."),
+    Ensaio("Raízes do Córrego",1,(2600,CHAO),("meio","dreno","lingueta","ponte","ralo"),
+           "S + Espaço na grade desce sem trocar de mapa. Explore até a membrana de libélula e suba pelos galhos a leste."),
     Ensaio("Duelo da aranha",0,ABRIGO,(),
            "Pule a pedra e enfrente a aranha no chão ou sobre o galho. E recupera luz no abrigo a oeste."),
 )

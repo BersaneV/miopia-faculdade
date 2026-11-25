@@ -143,6 +143,8 @@ PONTOS = (
     Objeto("volta_estaleiro", "passagem", 2018,790, "Sair na ponte do Córrego"),
     Objeto("placa_viveiro", "registro", 1982,1270, "Ler o nível dos antigos berços"),
     Objeto("comporta_viveiro", "valvula", 1570,1828, "Levantar a comporta da cisterna"),
+    Objeto("reliquia_espinho", "reliquia", 283,1173, "Recolher o espinho de acácia"),
+    Objeto("reliquia_resina", "reliquia", 2050,1270, "Recolher a resina âmbar"),
 )
 REGISTROS = {
     "placa_galeria": ("Escala de Nira",
@@ -156,7 +158,7 @@ REGISTROS = {
     "ralo_cisterna": ("Duas saídas da água",
         "A luz atravessa a argila e revela dois dentes de madeira. Girá-los deixa a água correr para as duas margens. O contrapeso sobe. Fio deixara aqui um casulo de reserva."),
     "placa_viveiro": ("Um risco em cada berço",
-        "As folhas altas guardam orvalho. As de baixo estão vazias. Em cada borda, Fio riscou a altura da cheia antes de levar os casulos para a oficina."),
+        "Fio levou os casulos para a oficina quando a água chegou a estes riscos. Deixou resina neste patamar para proteger a luz dos mensageiros. Recolha-a com E. Continue descendo pelos berços até a roda no fundo, à esquerda, para abrir a volta à cisterna."),
     "comporta_viveiro": ("A água encontra a cisterna",
         "A lâmina de casca sobe e a água corre para oeste. Lume pode voltar pela cisterna sem refazer o caminho pelos berços."),
 }
@@ -164,7 +166,7 @@ REGISTROS = {
 
 def objetos(j):
     return tuple(o for o in PONTOS
-                 if not (o.tipo=="elevador" and "ralo_aberto" not in j.cartografia))
+                 if not (o.tipo=="reliquia" and j.bolsa.estoque.get(o.id.removeprefix("reliquia_"))))
 
 
 def camera(j,dt=None):
@@ -236,6 +238,9 @@ def interagir(j,o):
         j.notificar("De volta à superfície · "+j.fase.name)
         return
     if ident.startswith("carro_"):
+        if "ralo_aberto" not in j.cartografia:
+            j.notificar("Contrapeso preso pela água. Desça à cisterna e use K + E no ralo a oeste, no fundo.",7.)
+            return
         # A subida ou descida automática percorre o eixo em tempo real.
         j.destino_vertical=1828 if ident=="carro_alto" else 316
         j.lume.vx=j.lume.vy=0.

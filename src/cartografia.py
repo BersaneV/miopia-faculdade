@@ -1,0 +1,141 @@
+"""Mapa jogável e rumo do clarão, ambos derivados da geometria e do objetivo atual."""
+import math
+
+import pygame
+
+from .ilustracao import AMBAR, OSSO, PALIDO, TEAL, fonte, losango, painel, texto
+
+
+def texto_curto(msg, largura, tamanho=14, estilo="normal"):
+    if fonte(tamanho,estilo).size(msg)[0]<=largura:
+        return msg
+    while msg and fonte(tamanho,estilo).size(msg+"…")[0]>largura:
+        msg=msg[:-1]
+    return msg.rstrip()+"…"
+
+
+def dimensoes(j):
+    if j.em_vertical:
+        from .corte_vertical import LARGURA, ALTURA
+        return LARGURA,ALTURA
+    return j.fase.width,getattr(j,"altura_mundo",540)
+
+
+def alvo_local(j):
+    from .orientacao import objetivo_atual
+    alvo=objetivo_atual(j)
+    if alvo is not None and alvo.regiao==("corte" if j.em_vertical else "superficie"):
+        return alvo
+    return None
+
+
+def janela(j,compacto):
+    w,h=dimensoes(j)
+    if not compacto:
+        return pygame.Rect(0,0,w,h)
+    largura,altura=min(1800,w),min(760,h)
+    x=max(0,min(w-largura,j.lume.rect.centerx-largura//2))
+    y=max(0,min(h-altura,j.lume.rect.centery-altura//2))
+    return pygame.Rect(x,y,largura,altura)
+
+
+def mapa_local(s,j,rect,compacto=False):
+    """A planta usa os sólidos reais, inclusive grades e o novo subsolo contínuo."""
+    r=pygame.Rect(rect)
+    mundo=janela(j,compacto)
+    sx,sy=r.w/mundo.w,r.h/mundo.h
+    def ponto(x,y):
+        return round(r.x+(x-mundo.x)*sx),round(r.y+(y-mundo.y)*sy)
+    clip=s.get_clip()
+    s.set_clip(r.clip(clip))
+    pygame.draw.rect(s,(12,22,24),r)
+    if j.em_vertical:
+        from .corte_vertical import setor
+    for tr in j.solidos:
+        if tr.tipo=="arena" or not tr.rect.colliderect(mundo):
+            continue
+        if j.em_vertical and "viu_"+setor(tr.rect.centery,tr.rect.centerx)[0] not in j.cartografia:
+            continue
+        x,y=ponto(tr.rect.left,tr.rect.top)
+        w,h=max(1,round(tr.rect.w*sx)),max(1,round(tr.rect.h*sy))
+        cor=(69,95,81) if tr.atravessavel else (45,62,52)
+        pygame.draw.rect(s,cor,(x,y,w,h))
+        pygame.draw.line(s,(126,154,125) if tr.descida else (88,119,102),(x,y),(x+w,y),1)
+    cam=pygame.Rect(round(r.x+(j.camera-mundo.x)*sx),
+                    round(r.y+(j.camera_y-mundo.y)*sy),round(960*sx),round(540*sy))
+    pygame.draw.rect(s,(64,81,77),cam,1)
+    for o in j.objetos:
+        if o.tipo not in ("refugio","fenda","passagem","valvula","saida","voltar"):
+            continue
+        if not mundo.collidepoint(o.x,o.y-8):
+            continue
+        if j.em_vertical and "viu_"+setor(o.y,o.x)[0] not in j.cartografia:
+            continue
+        px,py=ponto(o.x,o.y-12)
+        if o.tipo=="refugio":
+            pygame.draw.circle(s,PALIDO,(px,py),2 if compacto else 4,1)
+        elif o.tipo=="valvula":
+            pygame.draw.circle(s,(94,143,139),(px,py),1 if compacto else 3)
+        else:
+            losango(s,px,py,2 if compacto else 4,TEAL,False)
+    alvo=alvo_local(j)
+    if alvo:
+        px,py=ponto(alvo.x,alvo.y-20)
+        px=max(r.left+6,min(r.right-7,px))
+        py=max(r.top+6,min(r.bottom-7,py))
+        pygame.draw.circle(s,(162,230,198),(px,py),4 if compacto else 7,1)
+        pygame.draw.line(s,(162,230,198),(px-6,py),(px+6,py),1)
+        pygame.draw.line(s,(162,230,198),(px,py-6),(px,py+6),1)
+        if not compacto:
+            label=texto_curto(alvo.nome,min(200,r.w-14),14,"forte")
+            largura=fonte(14,"forte").size(label)[0]
+            tx=max(r.left+4,min(r.right-largura-4,px+12))
+            ty=max(r.top+2,min(r.bottom-19,py-24))
+            painel(s,(tx-3,ty-1,largura+6,21),False)
+            texto(s,label,tx,ty,14,OSSO,"forte")
+    px,py=ponto(*j.lume.rect.center)
+    losango(s,px,py,4 if compacto else 6,AMBAR)
+    s.set_clip(clip)
+    pygame.draw.rect(s,(62,85,80),r,1)
+
+
+def minimapa(s,j):
+    chefe=j.boss and not j.boss.vencido
+    y=88 if chefe else 18
+    r=pygame.Rect(250,y,416,88)
+    painel(s,r)
+    texto(s,"TRILHA LOCAL",261,y+4,10,PALIDO,"forte")
+    texto(s,"TAB  mapa completo",655,y+4,10,PALIDO,"normal","right")
+    mapa_local(s,j,(261,y+21,394,43),True)
+    alvo=alvo_local(j)
+    legenda=("Desvio · " if alvo and alvo.opcional else "Destino · ")+(alvo.nome if alvo else j.fase.name)
+    texto(s,texto_curto(legenda,389,12,"forte"),261,y+68,12,(162,230,198),"forte")
+
+
+def rastro_objetivo(s,j):
+    """O clarão aponta o rumo por 2,8 s; não afirma que a reta seja caminhável."""
+    if hasattr(j,"sala_id") or not j.vestigios:
+        return
+    idade=j.tempo-j.vestigios[-1].inicio
+    if not 0<=idade<2.8:
+        return
+    alvo=alvo_local(j)
+    if alvo is None:
+        return
+    px,py=j.lume.rect.center
+    dx,dy=alvo.x-px,alvo.y-20-py
+    dist=math.hypot(dx,dy)
+    if dist<34:
+        return
+    dx,dy=dx/dist,dy/dist
+    x,y=px-j.camera,py-j.camera_y
+    fase=1-min(1,max(0,(idade-1.6)/1.2))
+    cor=tuple(round(c*fase) for c in (162,230,198))
+    alcance=min(100.,dist-12.)
+    inicio=min(30.,alcance*.35)
+    for n in range(5):
+        d=inicio+(alcance-8-inicio)*n/4
+        pygame.draw.circle(s,cor,(round(x+dx*d),round(y+dy*d)),max(1,3-n//2))
+    tx,ty=x+dx*alcance,y+dy*alcance
+    pygame.draw.lines(s,cor,False,[(tx-dx*9-dy*5,ty-dy*9+dx*5),(tx,ty),
+                                  (tx-dx*9+dy*5,ty-dy*9-dx*5)],2)

@@ -62,15 +62,17 @@ def suportes():
 def desenhar_ponto(camada,o,j,cx):
     x=o.x-cx
     if o.tipo=="passagem":
-        # Boca emoldurada, aberta dos dois lados; o pé coincide com o apoio.
-        for lado in (-1,1):
-            pts=[(x+lado*30,o.y),(x+lado*31,o.y-26),(x+lado*24,o.y-54),(x+lado*4,o.y-70)]
-            pygame.draw.lines(camada,(79,74,59),False,pts,5)
-            pygame.draw.lines(camada,(171,144,98),False,pts,1)
-        losango(camada,x,o.y-47,5,AMBAR,False)
+        from .paisagem import passagem
+        passagem(camada,x,o.y,False)
+        return
+    if o.tipo=="reliquia":
+        from .paisagem import objeto
+        objeto(camada,o,j,cx,j.tempo)
         return
     if o.tipo=="elevador":
         if "ralo_aberto" in j.cartografia:
+            pygame.draw.lines(camada,(157,129,80),False,[(x-25,o.y),(x-17,o.y+8),(x+20,o.y+8),(x+27,o.y)],4)
+            pygame.draw.line(camada,(196,172,117),(x-25,o.y),(x+27,o.y),3)
             pygame.draw.line(camada,(151,129,86),(x,o.y-20),(x,o.y),3)
             losango(camada,x,o.y-11,6,AMBAR,False)
         return
@@ -103,8 +105,12 @@ def desenhar(s,j,t,nivel_brilho):
     cor=(149,121,81) if "ralo_aberto" in j.cartografia else (75,77,72)
     for x in (1037,1043):
         pygame.draw.line(camada,cor,(x-cx,298),(x-cx,1828),1)
-    for y in range(320,1828,32):
-        pygame.draw.line(camada,cor,(1036-cx,y+3),(1044-cx,y),1)
+    # Uma polia e a plataforma deixam claro que o cabo é um contrapeso.
+    pygame.draw.circle(camada,(90,79,50),(1040-cx,306),11,3)
+    if "ralo_aberto" not in j.cartografia:
+        pygame.draw.lines(camada,(76,73,54),False,[(1015-cx,1825),(1023-cx,1835),(1061-cx,1835),(1068-cx,1825)],4)
+        if abs(j.lume.rect.centerx-1040)<175 and j.lume.rect.bottom>1700:
+            texto(camada,"Contrapeso preso · abra o ralo a oeste",1040-cx,1781,12,PALIDO,"normal","centerx")
     for tr in j.solidos:
         if tr.rect.bottom+30>=cy and tr.rect.top-18<=cy+540:
             i=3 if tr.rect.y>=1200 else 0

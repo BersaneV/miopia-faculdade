@@ -9,6 +9,7 @@ class Item:
     nome: str
     descricao: str
     permanente: bool = False
+    passivo: bool = False
 
 
 ITENS = (
@@ -16,6 +17,9 @@ ITENS = (
     Item("pavio", "Pavio de pólen", "Ilumina o caminho ao seu redor por 12 segundos."),
     Item("casulo", "Casulo de seda", "Absorve o próximo ataque de uma criatura."),
     Item("concha", "Concha de escuta", "Localiza a criatura mais próxima. Aguarde cinco segundos entre escutas.", True),
+    Item("espinho", "Espinho de acácia", "Relíquia ativa ao recolher. Cortes causam 25% mais dano a criaturas comuns.", True, True),
+    Item("asa", "Membrana de libélula", "Relíquia ativa ao recolher. Lume anda e plana 12% mais rápido.", True, True),
+    Item("resina", "Resina de âmbar", "Relíquia ativa ao recolher. A luz se consome 35% mais devagar ao explorar.", True, True),
 )
 POR_ID = {item.id: item for item in ITENS}
 
@@ -37,18 +41,34 @@ class Bolsa:
     def quantidade(self):
         return self.estoque[self.equipado]
 
+    @property
+    def bonus_dano(self):
+        return 1.25 if self.estoque["espinho"] else 1.
+
+    @property
+    def bonus_velocidade(self):
+        return 1.12 if self.estoque["asa"] else 1.
+
+    @property
+    def fator_dreno(self):
+        return .65 if self.estoque["resina"] else 1.
+
+    @property
+    def reliquias(self):
+        return tuple(i for i in ITENS if i.passivo and self.estoque[i.id])
+
     def receber(self, item, quantidade):
         # Cada bolsa de trilha e cada presente têm um registro de coleta próprio.
         if POR_ID[item].permanente:
             self.estoque[item] = 1
         else:
             self.estoque[item] += quantidade
-        if not self.quantidade:
+        if not self.quantidade and not POR_ID[item].passivo:
             self.equipado = item
         self.revisao += 1
 
     def trocar(self):
-        disponiveis = [i.id for i in ITENS if self.estoque[i.id]]
+        disponiveis = [i.id for i in ITENS if not i.passivo and self.estoque[i.id]]
         if not disponiveis:
             return "A bolsa está vazia. Procure mantimentos nos desvios."
         if self.equipado in disponiveis:
@@ -142,7 +162,8 @@ class Bolsa:
                 n = estoque.get(item.id, 0)
                 if type(n) is int:
                     bolsa.estoque[item.id] = max(0, min(1 if item.permanente else 9999, n))
-        if isinstance(dados.get("equipado"), str) and dados["equipado"] in POR_ID:
+        if (isinstance(dados.get("equipado"), str) and dados["equipado"] in POR_ID
+                and not POR_ID[dados["equipado"]].passivo):
             bolsa.equipado = dados["equipado"]
         bolsa.escudo = dados.get("escudo") is True
         for campo, atributo, limite in (
@@ -263,6 +284,7 @@ def ajuda_do_refugio(j, nome, texto):
 def conversar(j, nome, texto_base):
     pedido = PEDIDOS[j.etapa]
     texto = texto_base
+    entregue_antes = "pedido_entregue" in j.flags
     if j.modo == "historia" and nome in (pedido.origem, pedido.destino):
         if "pedido_entregue" in j.flags:
             texto = pedido.depois if nome == pedido.destino else texto_base
@@ -284,6 +306,23 @@ def conversar(j, nome, texto_base):
                     texto = pedido.entregar
     else:
         texto = ajuda_do_refugio(j, nome, texto)
+    # O recado completo permanece no diário. Quem conhece a travessia também
+    # explica a ação atual, inclusive se Lume saltou a ponte sem abri-la.
+    de_casa = {
+        "Nira": "Marquei no mapa o caminho que ainda falta abrir.",
+        "Casca": "Fui eu que desviei a água da borda. Quero ajudar a devolvê-la.",
+        "Fio": "Preciso da ponte para levar os casulos pela margem.",
+        "Eco": "Minha família espera do outro lado. Vou mostrar o caminho.",
+        "Nó": "O sino é uma rota de volta para a guardiã.",
+    }
+    if nome in de_casa and j.modo == "historia" and not j.em_vertical:
+        from .orientacao import objetivo_atual
+        alvo = objetivo_atual(j)
+        if alvo:
+            j.memorizar("Caminho indicado por " + nome, alvo.detalhe)
+            entregou_agora = not entregue_antes and "pedido_entregue" in j.flags
+            if "chefe" not in j.flags and not entregou_agora:
+                texto = de_casa[nome] + " " + alvo.detalhe
     j.dialogo = (nome, texto)
     j.memorizar(nome, texto)
     j.eventos.append("pagina")
@@ -347,5 +386,5 @@ def guardar_virada(j, eventos):
     if j.modo == "historia":
         titulo, texto = eventos[j.etapa]
         j.memorizar(titulo, texto)
-        if eventos is not RAIZES:
-            j.notificar(texto, 6.)
+        # A anotação narrativa não encobre a confirmação do mecanismo, que
+        # informa qual passagem abriu e qual é a próxima ação disponível.

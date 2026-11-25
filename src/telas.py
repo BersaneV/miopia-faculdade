@@ -212,8 +212,29 @@ def diario(a,s):
     total=len(j.diario)+2+tem_corte
     texto(s,f"{a.pagina+1} / {total}",873,77,20,PALIDO,"titulo","right")
     if a.pagina==0:
-        texto(s,"O mapa de Nira",85,143,23,AMBAR,"titulo")
-        texto(s,"Cada raiz acesa revela o caminho seguinte.",85,177,17,PALIDO)
+        from .cartografia import alvo_local, mapa_local, texto_curto
+        texto(s,"Corte da Figueira" if j.em_vertical else j.fase.name,85,135,23,AMBAR,"titulo")
+        texto(s,"Âmbar · Lume     Alvo verde · próximo passo     Círculo · marco",85,168,14,PALIDO)
+        mapa_local(s,j,(85,197,780,153))
+        alvo=alvo_local(j)
+        texto(s,texto_curto(j.objetivo,780,17,"forte"),85,362,17,OSSO,"forte")
+        if alvo:
+            # O relato completo fica no diário; a faixa ao vivo mantém uma ação.
+            for n,linha in enumerate(linhas(alvo.detalhe,780,15)[:2]):
+                texto(s,linha,85,390+n*19,15,PALIDO)
+        reliquias=getattr(j.bolsa,"reliquias",())
+        if reliquias:
+            bonus=[]
+            if j.bolsa.bonus_dano>1: bonus.append(f"dano +{round((j.bolsa.bonus_dano-1)*100)}%")
+            if j.bolsa.bonus_velocidade>1: bonus.append(f"movimento +{round((j.bolsa.bonus_velocidade-1)*100)}%")
+            if j.bolsa.fator_dreno<1: bonus.append(f"gasto de luz −{round((1-j.bolsa.fator_dreno)*100)}%")
+            texto(s,texto_curto("Relíquias ativas · "+" · ".join(bonus),780,13),85,436,13,AMBAR)
+        else:
+            texto(s,"K   um clarão revela o rumo do objetivo por alguns instantes",85,436,13,TEAL)
+    
+    elif a.pagina==1:
+        texto(s,"As quatro raízes da figueira",85,143,23,AMBAR,"titulo")
+        texto(s,"Reacenda as raízes para levar orvalho de volta às margens.",85,177,17,PALIDO)
         for n,nome in enumerate(("Bosque","Córrego","Taquaral","Gruta")):
             x=173+n*200
             if n<3: pygame.draw.line(s,TEAL,(x+8,260),(x+192,260),1)
@@ -221,27 +242,8 @@ def diario(a,s):
             losango(s,x,260,10,AMBAR if n==j.etapa or feito else TEAL,feito)
             if n==j.etapa: pygame.draw.circle(s,OSSO,(x,260),18,1)
             texto(s,nome if (j.volta,n) in j.historico else "···",x,295,19,OSSO,"titulo","centerx")
-        texto(s,"Objetivo",85,350,16,AMBAR,"forte")
-        y=paragrafo(s,j.objetivo,85,374,765,17)
-        if j.pedido_local:
-            paragrafo(s,j.pedido_local,85,y+7,765,15,PALIDO)
-    
-    elif a.pagina==1:
-        texto(s,j.fase.name,85,143,25,AMBAR,"titulo")
-        texto(s,"Traçado da região  ·  posição de Lume em âmbar",85,184,16,PALIDO)
-        from .fases import terrenos
-        for tr in terrenos(j.etapa,j.flags):
-            if tr.tipo=="arena": continue
-            x=89+round(tr.rect.x/j.fase.width*775)
-            y=309+round((tr.rect.y-400)*.24)
-            w=max(2,round(tr.rect.w/j.fase.width*775))
-            pygame.draw.line(s,TEAL,(x,y),(x+w,y),3 if tr.tipo=="chao" else 2)
-        if not j.em_vertical:
-            px=89+round(j.lume.rect.centerx/j.fase.width*775)
-            losango(s,px,303+round((j.lume.rect.bottom-400)*.24),5,AMBAR)
-        texto(s,"Refúgio",89,348,15,PALIDO)
-        texto(s,"Arena",650,348,15,PALIDO)
-        texto(s,"Raiz",820,348,15,PALIDO)
+        texto(s,"Pedidos dos moradores",85,350,16,AMBAR,"forte")
+        paragrafo(s,j.pedido_local or "Converse com os moradores para descobrir pedidos e recompensas.",85,379,765,16,PALIDO)
     elif a.pagina==2 and tem_corte:
         from .corte_vertical import desenhar_mapa
         texto(s,"Corte da Figueira",85,130,25,AMBAR,"titulo")

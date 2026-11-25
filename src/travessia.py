@@ -11,7 +11,7 @@ from .fases import (ARENA, CHAO, FIM_ARENA, FALAS, FASES, MEIO, RAIZ, SAIDA,
                     RAMAIS, Objeto, Terreno, montar_infinito, terrenos)
 
 
-from . import narrativa, corte_vertical
+from . import narrativa, corte_vertical, subsolo
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,9 @@ def aproximar(valor, alvo, passo):
 class Lume:
     ALTURA = 42
     BAIXO = 20
-    PLANEIO = 1.12
+    # Compatibilidade com ferramentas que inspecionam esta reserva. A asa agora
+    # sustenta a queda enquanto Espaço estiver pressionado, sem cronômetro.
+    PLANEIO = 1.
 
     def __init__(self, x, y, vidas=3):
         self.rect = pygame.FRect(0, 0, 24, self.ALTURA)
@@ -56,6 +58,7 @@ class Lume:
         self.asa_disponivel = False
         self.batida_asa = 0.
         self.arma = Arma()
+        self.bonus_dano = self.bonus_velocidade = 1.
 
     @property
     def pose(self):
@@ -155,7 +158,7 @@ class Lume:
         if self.slide > 0:
             self.vx = self.face * 530.
         elif self.trava_lateral <= 0:
-            limite = 94 if r.h < self.ALTURA else 247
+            limite = (94 if r.h < self.ALTURA else 247) * self.bonus_velocidade
             self.vx = aproximar(self.vx, cmd.mover * limite, (1750 if self.chao else 950) * dt)
         old = r.copy()
         dx = (self.vx + corrente) * dt
@@ -169,11 +172,9 @@ class Lume:
                 self.vx = self.slide = 0.
 
         self.planando = bool(asas and cmd.segurar_salto and not cmd.baixo
-                             and self.vy > 48 and self.planeio > 0 and self.energia > 3
+                             and self.vy > 48
                              and not (contato and cmd.mover == contato))
         if self.planando:
-            self.planeio = max(0., self.planeio - dt)
-            self.energia -= 1.1 * dt
             self.vy = aproximar(self.vy, 76., dt * 840)
         elif contato and cmd.mover == contato and self.vy > 0:
             self.vy = min(self.vy + 240 * dt, 78.)
@@ -277,6 +278,8 @@ class Jornada:
         if self.modo == "infinito":
             self.variante, inimigos, self.gotas, self.gota_minuto = montar_infinito(indice, self.volta)
         self.inimigos = [Inimigo(*e, dificuldade=self.dificuldade) for e in inimigos if "inimigo_" + str(e[1]) not in self.flags]
+        if subsolo.ativo(self) and "inimigo_2860" not in self.flags:
+            self.inimigos.append(Inimigo("aranha",2860,1102,dificuldade=self.dificuldade))
         for e in self.inimigos:
             e.guarda = self.tranca_fechada and e.origem[0] == VIGIA_X and e.tipo == "carabideo"
         # No Bosque, a primeira silhueta a aparecer precisa ser a de Lume.
@@ -355,6 +358,10 @@ class Jornada:
         return corte_vertical.setor(self.lume.rect.centery,self.lume.rect.centerx)[1] if self.em_vertical else ""
 
     @property
+    def altura_mundo(self):
+        return corte_vertical.ALTURA if self.em_vertical else (subsolo.ALTURA if subsolo.ativo(self) else 540)
+
+    @property
     def orvalhos(self):
         return sum(1 for k in self.flags if k.startswith("gota_"))
 
@@ -388,6 +395,8 @@ class Jornada:
         if self.em_vertical:
             return corte_vertical.terrenos("viveiro_aberto" in self.cartografia)
         out = terrenos(self.etapa, self.flags)
+        if subsolo.ativo(self):
+            out = subsolo.terrenos(out)
         if self.tranca_fechada:
             out.append(Terreno(pygame.Rect(TRANCA_X, 223, 36, CHAO-223), "tranca"))
         if self.boss:
@@ -428,6 +437,8 @@ class Jornada:
         if self.etapa == 3 and "chefe" in self.flags:
             out.append(Objeto("coruja_calma", "npc", FIM_ARENA+43, CHAO, "Coruja"))
         out.extend(corte_vertical.entradas(self))
+        if subsolo.ativo(self):
+            out.extend(subsolo.objetos(self))
         return out
 
     def proximo(self):
@@ -480,24 +491,19 @@ class Jornada:
 
     @property
     def objetivo(self):
-        if self.em_vertical:
-            return corte_vertical.objetivo(self)
-        if self.tranca_fechada and self.lume.rect.centerx > 1750:
-            return "Afaste o vigia para soltar a trança de raízes"
-        for flag, texto in self.fase.passos:
-            if flag not in self.flags:
-                return texto
-        if "chefe" not in self.flags:
-            return "Atravesse a porteira da arena" if not self.boss else self.boss.dica
-        if "raiz" not in self.flags:
-            return "Leve três orvalhos à raiz" if self.orvalhos < 3 else "Devolva o orvalho à raiz lateral"
-        return "Siga até a figueira" if self.etapa == 3 else "Siga a trilha aberta para o próximo bioma"
+        from .orientacao import objetivo_atual
+        alvo = objetivo_atual(self)
+        if alvo:
+            return alvo.texto
+        return "Observe o fio e o salto. Enfrente a aranha e volte ao abrigo para tentar de novo."
 
     @property
     def dica_local(self):
         if self.em_vertical:
             return "Tab  mapa do corte   ·   S + Espaço  descer por uma grade"
         x = self.lume.rect.centerx
+        if subsolo.ativo(self) and 2480 < x < 3200:
+            return "Raízes inferiores · S + Espaço desce. Salte pelos galhos para voltar."
         if self.tranca_fechada and 1700 < x < TRANCA_X:
             return "A casca bloqueia de frente. O 3º J ou S + J no ar rompe a guarda."
         if self.etapa == 0:
@@ -532,6 +538,11 @@ class Jornada:
         self.lume.asa_disponivel = True
         self.lume.batida_asa = 0.
         self.lume.arma = Arma()
+        self.aplicar_reliquias()
+
+    def aplicar_reliquias(self):
+        self.lume.bonus_dano = self.bolsa.bonus_dano
+        self.lume.bonus_velocidade = self.bolsa.bonus_velocidade
 
     def notificar(self, texto, segundos=3.8):
         self.aviso, self.aviso_t = texto, segundos
@@ -575,6 +586,8 @@ class Jornada:
         self.camera = max(0, min(self.fase.width - 960, self.checkpoint[0] - 340))
         if self.em_vertical:
             corte_vertical.camera(self)
+        elif subsolo.ativo(self):
+            subsolo.camera(self)
         self.notificar("Lume reencontra a luz do marco.")
         self.eventos.append("retorno")
 
@@ -600,6 +613,16 @@ class Jornada:
         self.eventos.append("morte")
 
     def interagir(self, o):
+        if o.tipo == "reliquia":
+            item = o.id.removeprefix("reliquia_")
+            if not self.bolsa.estoque.get(item):
+                self.bolsa.receber(item, 1)
+                self.aplicar_reliquias()
+                ficha = narrativa.POR_ID[item]
+                self.memorizar(ficha.nome, ficha.descricao)
+                self.notificar(ficha.nome + " · " + ficha.descricao, 7.)
+                self.eventos.append("coleta")
+            return
         if self.em_vertical or o.tipo=="fenda":
             corte_vertical.interagir(self,o)
             return
@@ -623,7 +646,8 @@ class Jornada:
         elif o.id in self.fase.mecanismos:
             m = self.fase.mecanismos[o.id]
             if m.requer and m.requer not in self.flags:
-                self.notificar(m.falta)
+                from .orientacao import pista_mecanismo
+                self.notificar(pista_mecanismo(self, o), 7.)
             elif o.id in self.flags:
                 self.notificar(m.efeito)
             else:
@@ -646,7 +670,7 @@ class Jornada:
         elif o.tipo == "refugio":
             l.energia = 100.
             self.eventos.append("coleta")
-            self.notificar("O musgo devolve a luz de Lume.")
+            self.notificar("Luz restaurada. " + self.objetivo, 7.)
         elif o.tipo == "atalho":
             self.flags.add("atalho")
             self.recolocar((1728 if o.id == "via" else 320, CHAO))
@@ -725,7 +749,8 @@ class Jornada:
             self.vestigios.pop(0)
         self.aviso_t = max(0., self.aviso_t - dt)
         if self.aviso_t <= 0: self.aviso = ""
-        l.energia -= dt * (self.dreno + (.28 + min(5, self.volta) * .08 if self.modo == "infinito" else 0))
+        self.aplicar_reliquias()
+        l.energia -= dt * (self.dreno + (.28 + min(5, self.volta) * .08 if self.modo == "infinito" else 0)) * self.bolsa.fator_dreno
         if self.modo == "infinito":
             self.tempo_restante -= dt
             if self.tempo_restante <= 0:
@@ -755,7 +780,7 @@ class Jornada:
         pouso = not estava_chao and l.chao
         if pouso: self.eventos.append("pouso")
         if cmd.deslize and l.slide >= .60: self.eventos.append("deslize")
-        if l.rect.top > 550:
+        if l.rect.top > subsolo.limite_queda(self):
             self.perder_fagulha(motivo="queda")
             return
         for o in self.objetos:
@@ -810,6 +835,8 @@ class Jornada:
             alvo = ARENA - (960 - (FIM_ARENA - ARENA)) / 2
         alvo = max(0., min(self.fase.width - 960, alvo))
         self.camera += (alvo - self.camera) * (1. - math.exp(-7.5 * dt))
+        if subsolo.ativo(self):
+            subsolo.camera(self, dt)
 
     def combater_inimigos(self, dt, golpe, clarao):
         lume = self.lume

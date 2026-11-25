@@ -361,7 +361,7 @@ class App:
 
     def abrir_diario(self,origem):
         self.anterior=origem
-        self.pagina=2 if self.jogo.em_vertical else 0
+        self.pagina=0
         self.mudar("diario")
         self.som("pagina")
 

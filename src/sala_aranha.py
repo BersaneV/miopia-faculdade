@@ -28,10 +28,10 @@ class AranhaObservada(Inimigo):
         self.observacao = None
         self.instante_aviso = None
 
-    def preparar(self, lume):
+    def preparar(self, lume, terrenos=()):
         self.observacao = tuple(lume.rect.center)
         self.instante_aviso = self.relogio
-        return super().preparar(lume)
+        return super().preparar(lume, terrenos)
 
 
 class DueloAranha(Jornada):
@@ -76,7 +76,7 @@ class DueloAranha(Jornada):
         self.bolsa = Bolsa()
         self.bolsa.estoque["balsamo"] = 0
         self.lume = Lume(*ABRIGO, self.vidas_iniciais)
-        self.inimigos = [AranhaObservada("aranha", self.poleiro, CHAO, self.dificuldade)]
+        self.inimigos = [AranhaObservada("aranha", self.poleiro, CHAO, self.dificuldade, semente=self.semente)]
         super().reiniciar()
         self.lume.iframes = 0.
         self.notificar("O abrigo fica a oeste. A aranha patrulha além da pedra.")
