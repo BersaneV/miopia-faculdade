@@ -1,0 +1,10 @@
+# Miopia — dependências
+# Rode:  pip install -r requirements.txt
+
+pygame-ce>=2.4,<3        # motor do jogo (import pygame)
+
+# Só necessárias para os scripts de apoio:
+#   tools/gerar_audio.py      -> numpy
+#   tools/gerar_capturas.py   -> Pillow (monta o GIF)
+numpy>=1.24
+Pillow>=10.0
