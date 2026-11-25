@@ -17,7 +17,7 @@ class Ficha:
 
 
 FICHAS = (
-    Ficha("Asa Fendida", "asa-fendida", "Atraia a asa até uma raiz marcada. Abaixe-se.",
+    Ficha("Asa Fendida", "asa-fendida", "Atraia a asa até uma raiz marcada. Observe a altura das asas.",
           "Dorso exposto. Suba no patamar e golpeie com J.", "Asa Fendida recolhe as asas."),
     Ficha("Tecelã do Vão", "tecela", "Gire a válvula à esquerda para romper os fios.",
           "O ventre tocou o leito. Aproxime-se e golpeie com J.", "A teia solta a margem."),
@@ -90,7 +90,9 @@ class Encontro:
         self.alvo_y = chao - 28.
         self.impacta = False
         self.atingiu = False
+        self.asa_rasteira = False
         self.fios = []
+        self.segundo_fio = None
         self.tramas = []
         self.agua = self.onda = 0.
         self.barrel_x = self.inicio + 102.
@@ -124,6 +126,12 @@ class Encontro:
             return self.ficha.desfecho
         if self.estado == "aberto":
             return self.ficha.janela
+        if self.indice == 0 and self.estado in ("aviso", "investida"):
+            if self.asa_rasteira:
+                return "Asas abertas rente ao apoio. Salte quando ela se aproximar."
+            return "Asas recolhidas na altura do peito. Abaixe-se para ela passar."
+        if self.indice == 1 and self.estado == "aviso" and self.segundo_fio is not None:
+            return "A teia bifurca. Saia das duas linhas ou rompa os fios com a cortina."
         if self.indice == 2:
             if self.estado in ("rastro", "investida_seiva", "flor"):
                 return "O guardião segue a seiva. Salte sobre o casco."
@@ -134,6 +142,10 @@ class Encontro:
         if self.indice == 3 and self.sino_movido:
             return "Toque a corda na válvula. Siga o som até a parede."
         return self.ficha.pista
+
+    @property
+    def som_aviso(self):
+        return "casco_avanco" if self.indice == 0 and self.asa_rasteira else "aviso"
 
     def apoios(self):
         """Apoios de mão única; os degraus junto às marcas sempre ficam disponíveis."""
@@ -221,6 +233,7 @@ class Encontro:
 
     def _fechar(self):
         self.fios.clear()
+        self.segundo_fio = None
         self.agua = 0.
         self.sino_soou = False
         self.engatado = self.assentado = False
@@ -257,13 +270,16 @@ class Encontro:
     def _voar(self, dt, corpo, eventos, velocidade):
         self.y = self.alvo_y
         self.x = aproximar(self.x, self.destino, velocidade*dt)
-        # A linha alta passa pelo jogador em pé mas sobre a caixa agachada.
+        # A faixa anunciada permanece na mesma altura até o fim do voo.
         faixa = pygame.FRect(self.x-32, self.y-12, 64, 19)
         self._colisao(corpo, faixa, eventos)
         if abs(self.x-self.destino) < .01:
             if self.impacta:
                 self.y = self.chao - (57 if self.indice == 0 else 72)
-                self._abrir(5.6 if self.indice == 0 else 7.1, eventos)
+                janela = 7.1
+                if self.indice == 0:
+                    janela = 2.1 if self.progresso else 3.8
+                self._abrir(janela, eventos)
             else:
                 self._mudar("busca", .95)
 
@@ -280,7 +296,19 @@ class Encontro:
                     self._mudar("contorna", .65)
                     self.destino = self.dir if destino < (self.esq+self.dir)/2 else self.esq
                 else:
-                    self._aviso_investida(destino, self.chao-31, .95, impacta, eventos)
+                    # Só adapta a investida depois da primeira ferida. A mira usa
+                    # a postura visível neste instante, nunca o comando de Lume.
+                    self.asa_rasteira = self.progresso > 0 and (
+                        corpo.height <= 24 or (not self.asa_rasteira and corpo.bottom >= self.chao-20))
+                    piso = self.chao
+                    if self.progresso and corpo.bottom <= self.chao-45:
+                        apoio = next((a for a in self.apoios() if a.left <= corpo.centerx < a.right
+                                      and abs(corpo.bottom-a.top) <= 3), None)
+                        if apoio is not None:
+                            piso = apoio.top
+                    altura = 10 if self.asa_rasteira else 31
+                    self._aviso_investida(destino, piso-altura, .78 if self.progresso else .95,
+                                         impacta, eventos)
         elif self.estado == "contorna":
             self.x = aproximar(self.x, self.destino, 330*dt)
             self.frente = 1 if self.destino >= self.x else -1
@@ -292,7 +320,7 @@ class Encontro:
             if self.tempo <= 0:
                 self._mudar("investida", 2.)
         elif self.estado == "investida":
-            self._voar(dt, corpo, eventos, 498)
+            self._voar(dt, corpo, eventos, 552 if self.asa_rasteira else 498)
 
     def _tecela(self, dt, corpo, eventos):
         # A roda abre a água imediatamente. A aranha cai quando um fio tenso
@@ -305,7 +333,7 @@ class Encontro:
             self.y = aproximar(self.y, self.chao-31, dt*215)
             if self.tempo <= 0:
                 self.y = self.chao-31
-                self._abrir(4.8, eventos)
+                self._abrir(2.85 if self.progresso else 4.8, eventos)
             return
         if self.estado == "busca":
             self.y = aproximar(self.y, self.chao-208, dt*172)
@@ -314,12 +342,22 @@ class Encontro:
                 self.destino = corpo.centerx
                 self.alvo_y = corpo.centery
                 self.frente = 1 if self.destino > self.x else -1
-                self._mudar("aviso", .92)
+                if self.progresso:
+                    # Depois do primeiro corte cobre também a saída que leva ao
+                    # centro. Ambas as pontas ficam marcadas antes de disparar.
+                    lado = 1 if corpo.centerx < (self.esq+self.dir)/2 else -1
+                    lateral = max(self.esq, min(self.dir, corpo.centerx+lado*118))
+                    self.segundo_fio = (lateral, min(self.chao-7,corpo.bottom-5))
+                self._mudar("aviso", 1.02 if self.segundo_fio else .92)
                 eventos.append("aviso")
         elif self.estado == "aviso" and self.tempo <= 0:
-            vx, vy = self.destino-self.x, self.alvo_y-self.y
-            n = max(1., hypot(vx, vy))
-            self.fios.append(Fio(self.x, self.y, vx*265/n, vy*265/n))
+            alvos = [(self.destino,self.alvo_y)]
+            if self.segundo_fio is not None:
+                alvos.append(self.segundo_fio)
+            for x, y in alvos:
+                vx, vy = x-self.x, y-self.y
+                n = max(1., hypot(vx, vy))
+                self.fios.append(Fio(self.x, self.y, vx*265/n, vy*265/n))
             self.turno += 1
             self._mudar("busca", .98)
             eventos.append("teia")

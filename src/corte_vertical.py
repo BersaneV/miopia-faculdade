@@ -9,8 +9,9 @@ import pygame
 from .combate import Inimigo
 from .fases import CHAO, Objeto, Terreno
 
-LARGURA = 1440
+LARGURA = 2432
 ALTURA = 1908
+BOCA_LESTE = 1416
 NIVEIS = (
     ("copa", "Copa do Observatório", 0, 702),
     ("galeria", "Galeria dos Casulos", 702, 1150),
@@ -25,16 +26,20 @@ MARCOS = {
     "poco": (286, 1492),
     "cisterna": (455, 1828),
     "corrego": (1225, 1828),
+    "estaleiro": (1905, 790),
 }
-BOCAS = {"bosque": (0, 630), "copa": (0, 1320), "corrego": (1, 660)}
+BOCAS = {"bosque": (0, 630), "copa": (0, 1320), "corrego": (1, 660), "estaleiro": (1, 1944)}
 SUP = {
     "bosque": "Entrar no Corte da Figueira",
     "copa": "Voltar ao Observatório da Copa",
     "corrego": "Descer à cisterna sob o córrego",
+    "estaleiro": "Entrar no Estaleiro das Folhas",
 }
 
 
 def setor(y,x=None):
+    if x is not None and x >= BOCA_LESTE:
+        return ("estaleiro", "Estaleiro das Folhas") if y < 1160 else ("viveiro", "Viveiro Afundado")
     if x is not None and ARQUIVO.collidepoint(x,y):
         return "arquivo", "Arquivo da Casca"
     for ident, nome, topo, fundo in NIVEIS:
@@ -48,11 +53,12 @@ def entradas(j):
         return ()
     return tuple(Objeto("corte_"+nome, "fenda", x, CHAO, SUP[nome])
                  for nome, (etapa, x) in BOCAS.items()
-                 if etapa == j.etapa and (nome != "copa" or "atalho_copa" in j.cartografia))
+                 if etapa == j.etapa and (nome != "copa" or "atalho_copa" in j.cartografia)
+                 and (nome != "estaleiro" or "ponte" in j.flags))
 
 
-@lru_cache(maxsize=1)
-def terrenos():
+@lru_cache(maxsize=2)
+def terrenos(comporta_aberta=False):
     partes = []
     def t(x,y,w,h,material):
         partes.append(Terreno(pygame.Rect(x,y,w,h), material))
@@ -60,7 +66,11 @@ def terrenos():
     # Copa aberta em dois ombros separados por uma ponte de galhos.
     t(160,316,482,37,"plataforma")
     t(650,330,207,17,"ponte")
-    t(851,316,517,48,"chao")
+    # Janelas gradeadas alinham o ramal oriental aos patamares logo abaixo.
+    # A terra de cada lado mantém espessura e colisão nas duas direções.
+    t(851,316,217,40,"chao")
+    t(1068,316,150,16,"grade")
+    t(1218,316,150,40,"chao")
     # O caminho ocidental sobe em ziguezague. A queda oriental encontra outros apoios.
     for x,y,w in ((437,904,177),(360,820,160),(428,736,177),(493,652,174),
                   (421,568,168),(357,484,169),(427,400,172),
@@ -69,7 +79,9 @@ def terrenos():
         t(x,y,w,19,"plataforma")
     t(48,988,539,75,"chao")
     t(587,988,233,16,"grade")
-    t(820,988,544,75,"chao")
+    t(820,988,188,44,"chao")
+    t(1008,988,160,16,"grade")
+    t(1168,988,196,44,"chao")
     # Câmara escavada no oeste: teto, banco do arquivo e piso recortado
     # deixam abertos o corredor à direita e uma saída inferior ao poço.
     t(62,1038,300,36,"chao")
@@ -86,12 +98,32 @@ def terrenos():
         t(x,y,w,18,"plataforma")
     t(124,1492,324,77,"chao")
     t(448,1492,246,16,"grade")
-    t(694,1492,635,78,"chao")
+    t(694,1492,362,36,"chao")
+    t(1056,1492,162,16,"grade")
+    t(1218,1492,111,36,"chao")
     for x,y,w in ((544,1576,178),(617,1660,181),(556,1744,192),
                   (1067,1576,148),(1010,1660,164),(1066,1744,184)):
         t(x,y,w,18,"plataforma")
     t(36,1828,894,80,"chao")
     t(997,1828,397,80,"chao")  # uma fissura curta antes da desembocadura
+    # A parede entre as galerias tem duas aberturas em alturas distintas.
+    t(1394,0,44,846,"parede")
+    t(1394,1010,44,660,"parede")
+    if not comporta_aberta:
+        t(1394,1670,44,158,"tranca")
+    t(1358,988,265,24,"plataforma")
+    # O primeiro beiral pede a segunda batida de asas. A oficina fica sobre a grade.
+    t(1600,856,200,20,"plataforma")
+    t(1790,790,345,38,"plataforma")
+    t(2135,790,216,16,"grade")
+    t(2351,790,76,46,"chao")
+    for x,y,w in ((2139,886,208),(2046,982,203),(2130,1078,206),
+                  (2022,1174,217),(1895,1270,220),(1750,1366,219),
+                  (1580,1462,225),(1638,1558,228),(1550,1654,216),
+                  (1614,1744,228)):
+        t(x,y,w,18,"plataforma")
+    t(1388,1828,1038,80,"chao")
+    t(2394,0,38,1828,"parede")
     return tuple(partes)
 
 
@@ -107,6 +139,10 @@ PONTOS = (
     Objeto("volta_corrego", "passagem", 1225,1828, "Sair na margem do Córrego"),
     Objeto("carro_alto", "elevador", 1040,316, "Descer pelo contrapeso"),
     Objeto("carro_baixo", "elevador", 1040,1828, "Subir pelo contrapeso"),
+    Objeto("marco_estaleiro", "refugio", 1905,790, "Acender o marco do estaleiro"),
+    Objeto("volta_estaleiro", "passagem", 2018,790, "Sair na ponte do Córrego"),
+    Objeto("placa_viveiro", "registro", 1982,1270, "Ler o nível dos antigos berços"),
+    Objeto("comporta_viveiro", "valvula", 1570,1828, "Levantar a comporta da cisterna"),
 )
 REGISTROS = {
     "placa_galeria": ("Escala de Nira",
@@ -119,6 +155,10 @@ REGISTROS = {
         "Quatro linhas antigas cercam a pedra. A marca mais funda está seca há duas estações. O risco escuro continua até a cisterna sob o Córrego."),
     "ralo_cisterna": ("Duas saídas da água",
         "A luz atravessa a argila e revela dois dentes de madeira. Girá-los deixa a água correr para as duas margens. O contrapeso sobe. Fio deixara aqui um casulo de reserva."),
+    "placa_viveiro": ("Um risco em cada berço",
+        "As folhas altas guardam orvalho. As de baixo estão vazias. Em cada borda, Fio riscou a altura da cheia antes de levar os casulos para a oficina."),
+    "comporta_viveiro": ("A água encontra a cisterna",
+        "A lâmina de casca sobe e a água corre para oeste. Lume pode voltar pela cisterna sem refazer o caminho pelos berços."),
 }
 
 
@@ -163,6 +203,10 @@ def entrar(j,marco,pela_boca=False):
     j.eventos.append("porta")
 
 
+def ralo_iluminado(j,o):
+    return any(math.dist((o.x,o.y-12), (v.x,v.y)) < v.raio(j.tempo) for v in j.vestigios)
+
+
 def interagir(j,o):
     ident=o.id
     if ident.startswith("corte_"):
@@ -172,6 +216,9 @@ def interagir(j,o):
         return
     if ident.startswith("volta_"):
         boca=ident.removeprefix("volta_")
+        if boca=="estaleiro" and "ponte" not in j.historico.get((0,1),set()):
+            j.notificar("A saída dá na ponte do Córrego. Estenda a ponte pela margem para abrir a passagem.")
+            return
         if boca=="copa" and "atalho_copa" not in j.cartografia:
             j.notificar("A janela está presa por dentro. O pino fica no poleiro a oeste.")
             return
@@ -194,15 +241,18 @@ def interagir(j,o):
         j.lume.vx=j.lume.vy=0.
         j.eventos.append("corda")
         return
-    if ident=="marco_poco":
-        j.marco_vertical="poco"
-        j.checkpoint=MARCOS["poco"]
+    if ident in ("marco_poco","marco_estaleiro"):
+        j.marco_vertical=ident.removeprefix("marco_")
+        j.checkpoint=MARCOS[j.marco_vertical]
         j.lume.energia=100.
-        j.notificar("Marco do poço aceso. O retorno fica neste patamar.")
+        j.notificar("Marco aceso. O retorno fica neste patamar.")
         j.eventos.append("raiz")
         return
+    if ident=="comporta_viveiro" and "viveiro_aberto" not in j.cartografia:
+        j.cartografia.add("viveiro_aberto")
+        j.eventos.extend(("valvula","agua"))
     if ident=="ralo_cisterna" and "ralo_aberto" not in j.cartografia:
-        if not any(math.dist((o.x,o.y-12), (v.x,v.y)) < v.raio(j.tempo) for v in j.vestigios):
+        if not ralo_iluminado(j,o):
             if j.lume.energia<=22:
                 j.lume.energia=max(32., j.lume.energia)
                 j.notificar("O musgo do ralo devolve um pouco de luz. Use K sobre a pedra.")
@@ -234,6 +284,12 @@ def interagir(j,o):
 
 def objetivo(j):
     ident,_=setor(j.lume.rect.centery,j.lume.rect.centerx)
+    if ident=="estaleiro":
+        return ("A grade a leste da oficina desce ao viveiro" if j.lume.rect.bottom<850
+                else "Bata as asas outra vez para alcançar a oficina")
+    if ident=="viveiro":
+        return ("Volte pela comporta a oeste ou suba aos berços"
+                if "viveiro_aberto" in j.cartografia else "Siga os berços até a roda da comporta, no fundo")
     if ident=="arquivo":
         return "Examine o armário de Mimo. A galeria continua a leste"
     if ident=="copa":
@@ -244,7 +300,7 @@ def objetivo(j):
                 if "ralo_aberto" in j.cartografia else "Ilumine o ralo da cisterna e abra o canal")
     if ident=="poco":
         return "Leia a régua. A grade dá passagem à cisterna"
-    return "Suba à copa pelos galhos ou desça pela grade ao poço"
+    return "O estaleiro fica a leste. A grade central desce ao poço"
 
 
 def passo(j,dt,cmd,clarao):
@@ -263,15 +319,14 @@ def passo(j,dt,cmd,clarao):
         camera(j,dt)
         return
     estava_chao=l.chao
-    l.movimento(dt,cmd,terrenos(),0,True)
+    if l.movimento(dt,cmd,j.solidos,0,True):
+        j.eventos.append("pulo")
     l.rect.left=max(0,min(l.rect.left,LARGURA-l.rect.width))
     if l.rect.top>ALTURA+28:
         j.perder_fagulha(motivo="queda")
         return
     if l.chao and not estava_chao:
         j.eventos.append("pouso")
-    if cmd.salto and l.vy < -220 or l.impulso_parede:
-        j.eventos.append("pulo")
     if cmd.deslize and l.slide>=.60:
         j.eventos.append("deslize")
     if l.arma.avancar(dt,l):

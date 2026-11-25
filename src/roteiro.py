@@ -37,7 +37,7 @@ def epilogo(jogo):
 
 CONTROLES = (
     ("A / D   ou   setas", "Andar. Encoste numa parede e salte para a oposta."),
-    ("Espaço", "Saltar. Segure no ar para planar durante a queda."),
+    ("Espaço", "Saltar; solte e aperte no ar para o salto duplo. Segure na queda para planar."),
     ("S   /   S + Espaço", "Agachar / descer de uma plataforma vazada."),
     ("Shift + direção", "Deslizar. A corrente do córrego exige impulso."),
     ("E", "Conversar, operar mecanismos e abrir bolsas de trilha."),

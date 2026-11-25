@@ -10,6 +10,8 @@ ALIASES={"etapa":"abertura","selo":"seiva","chefe_exposto":"vulneravel","chefe_a
          "vulneravel":"vulneravel","exposto":"vulneravel","madeira":"impacto","barril":"valvula"}
 ALERTAS={"aviso":5,"dano":6,"acerto":7,"sino":8,"impacto":9,"vulneravel":8,
          "raiz":9,"porta":8,"seiva":8}
+PRESENCA = {"asa_perto", "patas_perto", "sopro_perto", "zurro_perto", "casco_perto"}
+INTERVALO_BATIMENTO = 6.
 
 
 def panoramica(delta, alcance=550):
@@ -33,6 +35,9 @@ class Audio:
         self.ativos=(0.,0.,0.)
         self.niveis=[0.,0.,0.]
         self.silencio=0.
+        self.fundo=1.
+        self.proximo_batimento=0.
+        self.passo_alterno=False
         self.grave=0.
         self.pasta=Path(pasta)
         self.fx={}
@@ -49,7 +54,10 @@ class Audio:
             for n,nome in enumerate(("camada_combate","camada_pulso","camada_vida")):
                 canal=pygame.mixer.Channel(n)
                 canal.set_volume(0.)
-                if nome in self.fx: canal.play(self.fx[nome],loops=-1)
+                if nome=="camada_pulso":
+                    canal.stop()
+                elif nome in self.fx:
+                    canal.play(self.fx[nome],loops=-1)
                 self.camadas.append(canal)
             self.disponivel=True
         except (pygame.error,OSError):
@@ -71,6 +79,10 @@ class Audio:
         if not self.disponivel or self.mudo: return
         nome=ALIASES.get(nome,nome)
         som=self.fx.get(nome)
+        if nome=="passo":
+            if self.passo_alterno:
+                som=self.fx.get("passo_folha",som)
+            self.passo_alterno=not self.passo_alterno
         if not som: return
         n=ALERTAS.get(nome)
         canal=pygame.mixer.Channel(n) if n is not None else next((pygame.mixer.Channel(i) for i in range(16,28) if not pygame.mixer.Channel(i).get_busy()),None)
@@ -82,41 +94,54 @@ class Audio:
 
     def tocar_local(self, nome, fonte_x, ouvinte_x):
         if not self.disponivel or self.mudo:
-            return
+            return False
         som = self.fx.get(nome)
         if som is None:
-            return
+            return False
         esq, dire = panoramica(fonte_x-ouvinte_x)
         if esq + dire == 0:
-            return
-        # Seis vozes posicionais, independentes da música, impacto e interface.
-        canais = [pygame.mixer.Channel(n) for n in range(10,16)]
+            return False
+        # O ruído de aproximação jamais ocupa uma voz reservada ao ataque.
+        presenca = nome in PRESENCA
+        canais = [pygame.mixer.Channel(n) for n in (range(10,12) if presenca else range(12,16))]
         livre = next((c for c in canais if not c.get_busy()), None)
         if livre is None:
-            return
-        livre.set_volume(esq*self.volume_efeitos, dire*self.volume_efeitos)
+            return False
+        ganho = self.volume_efeitos * (.72 if presenca else 1.)
+        livre.set_volume(esq*ganho, dire*ganho)
         livre.play(som)
-        self.silencio = .38
+        if not presenca:
+            self.silencio = .38
+        return True
 
     def ambiente(self,*,combate,energia,raizes,suspenso=False):
         self.grave=max(0.,min(1.,(31.-energia)/21.))
-        self.ativos=(.44 if combate else 0.,self.grave*.64,
-                     0. if suspenso else min(.48,.12*raizes))
+        self.ativos=(.28 if combate else 0.,self.grave*.42,
+                     0. if suspenso else min(.32,.08*raizes))
 
     def aplicar_volumes(self):
         if not self.disponivel: return
         musica=0 if self.mudo else self.volume_musica
         fx=0 if self.mudo else self.volume_efeitos
-        corte=(1-.40*self.grave)*(.37 if self.silencio>0 else 1)
-        pygame.mixer.music.set_volume(musica*corte*.79)
+        corte=(1-.25*self.grave)*self.fundo
+        pygame.mixer.music.set_volume(musica*corte*.62)
         for i,canal in enumerate(self.camadas):
-            canal.set_volume(self.niveis[i]*(fx if i==1 else musica))
+            canal.set_volume(self.niveis[i]*(fx if i==1 else musica*self.fundo))
         if self.mudo:
             for n in range(5,pygame.mixer.get_num_channels()): pygame.mixer.Channel(n).stop()
 
     def atualizar(self,dt):
         if not self.disponivel: return
         self.silencio=max(0.,self.silencio-dt)
+        alvo = .65 if self.silencio else 1.
+        tempo = .07 if self.silencio else .48
+        self.fundo += (alvo-self.fundo)*(1-math.exp(-dt/tempo))
         for i,destino in enumerate(self.ativos):
             self.niveis[i]+=(destino-self.niveis[i])*min(1,dt*5)
         self.aplicar_volumes()
+        self.proximo_batimento=max(0.,self.proximo_batimento-dt)
+        if self.grave >= .4 and not self.mudo and self.proximo_batimento == 0:
+            batimento=self.fx.get("camada_pulso")
+            if batimento is not None:
+                self.camadas[1].play(batimento)
+            self.proximo_batimento=INTERVALO_BATIMENTO

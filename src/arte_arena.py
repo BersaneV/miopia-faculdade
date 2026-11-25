@@ -184,6 +184,17 @@ def _cenario(surf,e,cx,cy):
         _sino(surf,bx,by,e.relogio,e.onda if e.sino_soou or e.impacta else 0)
 
 
+def _linha_de_aviso(surf, inicio, fim):
+    dx,dy = fim[0]-inicio[0],fim[1]-inicio[1]
+    pontos = max(1,round((dx*dx+dy*dy)**.5/16))
+    for i in range(pontos):
+        a,b = i/pontos,(i+.46)/pontos
+        pygame.draw.line(surf,FERRUGEM,(inicio[0]+dx*a,inicio[1]+dy*a),
+                         (inicio[0]+dx*b,inicio[1]+dy*b),2)
+    pygame.draw.circle(surf,FERRUGEM,tuple(round(v) for v in fim),7,1)
+    return pontos
+
+
 def _mira(surf, e, cx, cy):
     x, y = e.x-cx, e.y-cy
     if e.estado in ("aviso", "rastro"):
@@ -194,13 +205,15 @@ def _mira(surf, e, cx, cy):
         else:
             fim = (e.destino-cx, e.alvo_y-cy)
             inicio = (x,e.alvo_y-cy)
-        pontos = max(1,round(((fim[0]-inicio[0])**2+(fim[1]-inicio[1])**2)**.5 / 16))
-        for i in range(pontos):
-            a,b = i/pontos,(i+.46)/pontos
-            pygame.draw.line(surf,FERRUGEM,
-                             (inicio[0]+(fim[0]-inicio[0])*a,inicio[1]+(fim[1]-inicio[1])*a),
-                             (inicio[0]+(fim[0]-inicio[0])*b,inicio[1]+(fim[1]-inicio[1])*b),2)
-        pygame.draw.circle(surf,FERRUGEM,tuple(round(v) for v in fim),7,1)
+        pontos = _linha_de_aviso(surf,inicio,fim)
+        if e.indice==1 and e.segundo_fio is not None:
+            x2,y2 = e.segundo_fio
+            _linha_de_aviso(surf,inicio,(x2-cx,y2-cy))
+        if e.indice==0 and e.asa_rasteira:
+            # Folhas levantando da linha de voo; forma legível também em mudo.
+            for i in range(1,pontos,3):
+                px = inicio[0]+(fim[0]-inicio[0])*i/pontos
+                pygame.draw.lines(surf,FIO,False,[(px-4,fim[1]+3),(px,fim[1]-2),(px+4,fim[1]+3)],2)
         for j in [-1,0,1]:
             pygame.draw.line(surf,FERRUGEM,(x+j*6,y-43),(x+j*9,y-50),2)
     if e.estado == "aberto":
@@ -224,6 +237,8 @@ def desenhar_encontro(surf,e,cx,cy=0):
         pygame.draw.arc(surf,TEAL,(face-r,y-14-r,2*r,2*r),-.8 if e.frente>0 else 2.35,
                         .8 if e.frente>0 else 3.95,1)
     pose = {"aviso":1,"rastro":1,"investida_seiva":2,"investida":2,"desce":2,"flor":2,"aberto":3,"repouso":3}.get(e.estado,0)
+    if e.indice==0 and e.estado=="aviso" and e.asa_rasteira:
+        pose = 2  # abre as asas horizontalmente já na preparação do rasante
     imagem = _corpo(e.indice,pose,int(e.relogio*(5 if pose==0 else 8))%4,e.frente)
     caixa = imagem.get_rect(center=(x,y))
     caixa.bottom = min(caixa.bottom, round(e.chao-cy+2))

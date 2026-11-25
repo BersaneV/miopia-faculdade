@@ -77,6 +77,16 @@ def sprite(surf, nome, x, pe, largura, altura, espelho=False):
     return r
 
 
+def manivela(surf, x, pe, largura, altura, girada):
+    sprite(surf, "obj_valvula", x, pe, largura, altura)
+    eixo = round(x), round(pe - altura * .61)
+    lado = 1 if girada else -1
+    pino = eixo[0] + lado * round(largura * .27), eixo[1] + lado * round(altura * .17)
+    pygame.draw.line(surf, TINTA, eixo, pino, 5)
+    pygame.draw.line(surf, AMBAR, eixo, pino, 2)
+    pygame.draw.circle(surf, OSSO, pino, 3)
+
+
 def losango(surf, x, y, r=4, cor=AMBAR, cheio=True):
     pts = ((x,y-r),(x+r,y),(x,y+r),(x-r,y))
     pygame.draw.polygon(surf, cor, pts, 0 if cheio else 1)

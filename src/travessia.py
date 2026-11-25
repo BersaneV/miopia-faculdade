@@ -53,6 +53,8 @@ class Lume:
         self.trava_lateral = self.graca_parede = 0.
         self.ignorar_topo = None
         self.planeio = self.PLANEIO
+        self.asa_disponivel = False
+        self.batida_asa = 0.
         self.arma = Arma()
 
     @property
@@ -81,9 +83,12 @@ class Lume:
 
     def movimento(self, dt, cmd, solidos, corrente, asas):
         self.bateu = self.planando = self.impulso_parede = False
+        saltou = False
         for timer in ("buffer", "slide", "slide_cd", "golpe", "golpe_cd", "pulso",
-                      "pulso_cd", "iframes", "impacto", "trava_lateral", "graca_parede"):
+                      "pulso_cd", "iframes", "impacto", "trava_lateral", "graca_parede", "batida_asa"):
             setattr(self, timer, max(0., getattr(self, timer) - dt))
+        if self.chao:
+            self.asa_disponivel = True
         self.coyote = .105 if self.chao else max(0., self.coyote - dt)
         self.altura(cmd.baixo or self.slide > 0, solidos)
         r = self.rect
@@ -128,6 +133,7 @@ class Lume:
                 self.vy = -502.
                 self.buffer = self.coyote = 0.
                 self.chao = False
+                saltou = True
             elif self.graca_parede > 0 and self.lado_parede != self.ultimo_impulso:
                 # A distância entre os troncos permite alternar paredes. Uma
                 # mesma face só volta a dar impulso depois de outro apoio.
@@ -137,6 +143,13 @@ class Lume:
                 self.trava_lateral = .15
                 self.buffer = self.graca_parede = 0.
                 self.impulso_parede = True
+                saltou = True
+            elif asas and self.asa_disponivel:
+                self.vy = -440.
+                self.asa_disponivel = False
+                self.batida_asa = .18
+                self.buffer = 0.
+                saltou = True
         if not cmd.segurar_salto and self.vy < -233 and self.arma.rebote <= 0:
             self.vy = -233.
         if self.slide > 0:
@@ -179,13 +192,16 @@ class Lume:
                 self.chao = True
                 self.planando = False
                 self.planeio = self.PLANEIO
+                self.asa_disponivel = True
+                self.batida_asa = 0.
                 self.ultimo_impulso = self.lado_parede = 0
                 self.graca_parede = 0.
             elif self.vy < 0 and not t.atravessavel and old.top >= t.rect.bottom - .5:
                 r.top = t.rect.bottom
                 self.vy = 0.
-        if self.ignorar_topo is not None and r.top > self.ignorar_topo:
+        if self.ignorar_topo is not None and (r.top > self.ignorar_topo or r.bottom < self.ignorar_topo):
             self.ignorar_topo = None
+        return saltou
 
     def atacar(self, cmd):
         if cmd.golpe:
@@ -200,6 +216,18 @@ class Lume:
 NIVEIS = {
     "facil": (.32, 12, 4), "fácil": (.32, 12, 4), "sereno": (.32, 12, 4),
     "normal": (.5, 19, 3), "dificil": (.74, 25, 2), "difícil": (.74, 25, 2),
+}
+
+# O pino da roda fica nesta posição quando a alteração no mundo já foi feita.
+MANIVELAS = {
+    "valvula": ("valvula", "Examinar a corda baixada"),
+    "dreno": ("dreno", "Examinar o canal drenado"),
+    "ponte": ("ponte", "Examinar a ponte estendida"),
+    "ralo": ("ralo", "Examinar a comporta aberta"),
+    "roldana": ("roldana", "Examinar a roldana destravada"),
+    "selo_copa": ("atalho_copa", "Examinar a janela aberta"),
+    "ralo_cisterna": ("ralo_aberto", "Examinar o ralo aberto"),
+    "comporta_viveiro": ("viveiro_aberto", "Examinar a comporta aberta"),
 }
 
 
@@ -358,7 +386,7 @@ class Jornada:
     @property
     def solidos(self):
         if self.em_vertical:
-            return corte_vertical.terrenos()
+            return corte_vertical.terrenos("viveiro_aberto" in self.cartografia)
         out = terrenos(self.etapa, self.flags)
         if self.tranca_fechada:
             out.append(Terreno(pygame.Rect(TRANCA_X, 223, 36, CHAO-223), "tranca"))
@@ -403,6 +431,8 @@ class Jornada:
         return out
 
     def proximo(self):
+        if self.destino_vertical is not None:
+            return None
         p = self.lume.rect
         candidatos = []
         for o in self.objetos:
@@ -411,9 +441,20 @@ class Jornada:
             dx = abs(o.x - p.centerx)
             if o.tipo == "corda" and dx < 50 and 216 <= p.bottom <= CHAO + 3:
                 candidatos.append((dx, o))
+            elif o.tipo == "valvula":
+                # O desenho é apoiado no piso, mas Lume alcança seu aro acima da base.
+                eixo = o.x, o.y - 35
+                if dx <= 51 and p.top - 25 <= eixo[1] <= p.bottom + 25 and not any(
+                    not t.atravessavel and t.rect.clipline(p.center, eixo) for t in self.solidos
+                ):
+                    candidatos.append((math.dist(p.center, eixo), o))
             elif dx <= 51 and abs(o.y - p.bottom) <= 48:
                 candidatos.append((math.hypot(dx, o.y - p.bottom), o))
         return min(candidatos, key=lambda par: par[0])[1] if candidatos else None
+
+    def manivela_girada(self, o):
+        memoria = self.cartografia if self.em_vertical else self.flags
+        return o.id in MANIVELAS and MANIVELAS[o.id][0] in memoria
 
     @property
     def interacao(self):
@@ -424,6 +465,15 @@ class Jornada:
             return ""
         if o.tipo == "npc":
             return "Ouvir " + o.nome
+        if o.tipo == "valvula":
+            if self.manivela_girada(o):
+                return MANIVELAS[o.id][1]
+            if o.id == "ralo_cisterna":
+                return "Destravar o ralo" if corte_vertical.ralo_iluminado(self, o) else "Examinar a trava (precisa de K)"
+            if o.id == "ponte" and "lingueta" not in self.flags:
+                return "Examinar encaixe sem lingueta"
+            if o.id == "ralo" and "ponte" not in self.flags:
+                return "Examinar ralo preso à ponte"
         if o.id in self.fase.mecanismos and o.id in self.flags:
             return "Examinar o mecanismo"
         return o.nome
@@ -452,7 +502,7 @@ class Jornada:
             return "A casca bloqueia de frente. O 3º J ou S + J no ar rompe a guarda."
         if self.etapa == 0:
             if x < 295: return "A D  mover     Espaço  saltar     E  interagir"
-            if x < 580: return "Segure Espaço para alcançar o galho mais alto."
+            if x < 580: return "No ar, solte e aperte Espaço de novo para alcançar o galho de orvalho."
             if 622 < x < 1100: return "J, J, J: três cortes. No ar, S + J rebate sobre o alvo."
             if 1135 < x < 1285: return "S  agachar     Shift + direção  deslizar"
             if 1415 < x < 1720: return "J  golpe curto     K  clarão (22 de luz)"
@@ -479,6 +529,8 @@ class Jornada:
         self.lume.ultimo_impulso = self.lume.lado_parede = 0
         self.lume.ignorar_topo = None
         self.lume.planeio = self.lume.PLANEIO
+        self.lume.asa_disponivel = True
+        self.lume.batida_asa = 0.
         self.lume.arma = Arma()
 
     def notificar(self, texto, segundos=3.8):
@@ -640,19 +692,24 @@ class Jornada:
         cmd = cmd or Comando()
         # E e os ataques são bordas de tecla, mesmo quando um frame precisa
         # de vários passos de física. Conversa congela até o último relógio.
-        if cmd.interagir and not (self.boss and not self.boss.vencido):
-            o = self.proximo()
-            if o:
-                origem = self.etapa, self.em_vertical
-                self.interagir(o)
-                if self.dialogo or self.estado != "jogando" or origem != (self.etapa, self.em_vertical):
-                    return
+        o = self.proximo() if cmd.interagir and not (self.boss and not self.boss.vencido) else None
+        # Na cisterna, K e E podem chegar no mesmo quadro. Teste o clarão já lançado.
+        examinar_apos_clarao = o is not None and o.id == "ralo_cisterna" and cmd.clarao
+        if o and not examinar_apos_clarao:
+            origem = self.etapa, self.em_vertical
+            self.interagir(o)
+            if self.dialogo or self.estado != "jogando" or origem != (self.etapa, self.em_vertical):
+                return
         clarao = self.lume.atacar(cmd)
         if clarao:
             self.vestigios.append(Vestigio(*self.lume.rect.center, self.tempo))
             self.eventos.append("pulso")
             if not self.em_vertical:
                 narrativa.responder_chamado(self)
+        if examinar_apos_clarao:
+            self.interagir(o)
+            if self.dialogo:
+                return
         dt = min(.1, dt)
         passos = max(1, math.ceil(dt * 120 - 1e-7))
         retido = Comando(mover=cmd.mover, baixo=cmd.baixo, segurar_salto=cmd.segurar_salto)
@@ -689,7 +746,8 @@ class Jornada:
                 l.chao = False
         else:
             corrente = -128 if self.etapa == 1 and 855 < l.rect.centerx < 1032 and l.rect.bottom > 406 else 0
-            l.movimento(dt, cmd, self.solidos, corrente, True)
+            if l.movimento(dt, cmd, self.solidos, corrente, True):
+                self.eventos.append("pulo")
             if l.bateu:
                 l.energia = max(0., l.energia - 3.)
                 self.eventos.append("impacto")
@@ -697,9 +755,6 @@ class Jornada:
         pouso = not estava_chao and l.chao
         if pouso: self.eventos.append("pouso")
         if cmd.deslize and l.slide >= .60: self.eventos.append("deslize")
-        if cmd.salto and l.vy < -220: self.eventos.append("pulo")
-        if l.impulso_parede:
-            self.eventos.append("pulo")
         if l.rect.top > 550:
             self.perder_fagulha(motivo="queda")
             return

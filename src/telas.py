@@ -1,13 +1,17 @@
 """Menus e páginas desenhados em 960 × 540. As áreas clicáveis são as linhas visíveis."""
 import math
 import pygame
-from .ensaios import ENSAIOS
+from .ensaios import ENSAIOS, INDICE_ARANHA
 from . import ambiental
 from .narrativa import RAIZES
 from .ilustracao import (AMBAR, OSSO, PALIDO, TEAL, ROMANOS, brilho, imagem, linhas,
                          losango, painel, paragrafo, placa, texto)
 from .paisagem import NPC_TAM, slug
 from .roteiro import CONTROLES, ENTRADAS, FINAL, PROLOGO, epilogo
+
+SEMENTE_ANTERIOR=pygame.Rect(466,321,38,32)
+SEMENTE_SEGUINTE=pygame.Rect(643,321,38,32)
+VER_TENTATIVA=pygame.Rect(466,370,317,36)
 
 def fundo(s,a):
     s.blit(imagem("capa.jpg",960,540),(0,0))
@@ -54,11 +58,20 @@ def ensaios(a,s):
     livro(a,s,"Campo de testes","MIOPIA")
     texto(s,"Entre direto no trecho. Sua campanha fica salva à parte.",83,130,17,PALIDO)
     nomes=[c.nome for c in ENSAIOS]+["Voltar"]
-    opcoes(a,s,nomes,78,184,355,36,17)
+    opcoes(a,s,nomes,78,160,355,min(36,288//len(nomes)),17)
     if a.selecao<len(ENSAIOS):
         c=ENSAIOS[a.selecao]
         texto(s,c.nome,467,196,24,AMBAR,"titulo")
         paragrafo(s,c.pista,467,242,386,18)
+        if a.selecao==INDICE_ARANHA:
+            for botao,sinal in ((SEMENTE_ANTERIOR,"‹"),(SEMENTE_SEGUINTE,"›")):
+                painel(s,botao,False)
+                texto(s,sinal,botao.centerx,botao.y+1,22,AMBAR,"forte","centerx")
+            texto(s,f"Semente {a.semente_aranha}",573,328,16,OSSO,"forte","centerx")
+            if a.ultimo_replay is not None:
+                painel(s,VER_TENTATIVA,False)
+                texto(s,"V   Assistir à última tentativa",480,379,16,AMBAR,"forte")
+                paragrafo(s,a.aviso_replay,467,412,380,14,PALIDO)
     texto(s,"Enter   abrir trecho      Esc   voltar",82,459,15,PALIDO)
 
 
@@ -110,7 +123,9 @@ def pausa(a,s):
     if a.ensaio is not None:
         nomes[-1]="Voltar ao campo de testes"
     opcoes(a,s,nomes,315,176,330,39)
-    texto(s,"O tempo da mata está suspenso.",480,414,15,PALIDO,"normal","centerx")
+    dica=(f"Semente {a.jogo.semente}   ·   R para repetir" if a.ensaio==INDICE_ARANHA
+          else "O tempo da mata está suspenso.")
+    texto(s,dica,480,414,15,PALIDO,"normal","centerx")
 
 
 def morte(a,s):
@@ -129,7 +144,20 @@ def morte(a,s):
     nome="Tentar outra noite" if terminal and j.modo=="infinito" else "Voltar ao último marco"
     if a.ensaio is not None:
         nome="Repetir o ensaio"
-    opcoes(a,s,[nome,"Voltar ao menu"],209,328,540,40,19)
+    voltar="Voltar ao campo de testes" if a.ensaio==INDICE_ARANHA else "Voltar ao menu"
+    opcoes(a,s,[nome,voltar],209,328,540,40,19)
+
+
+def replay(a,s):
+    if a.reproducao is None:
+        painel(s,(202,106,556,94))
+        paragrafo(s,a.aviso_replay,223,118,512,17,OSSO)
+        texto(s,"Esc   voltar ao campo",223,165,15,AMBAR)
+    else:
+        painel(s,(246,18,421,64),False)
+        nome="Reprodução pausada" if a.replay_pausado else "Reprodução"
+        texto(s,f"{nome}   ·   {a.jogo.tempo:.1f} s",456,24,17,AMBAR,"forte","centerx")
+        texto(s,"Espaço   pausar / continuar      Esc   voltar",456,52,15,OSSO,"normal","centerx")
 
 
 def confirmar(a,s):
@@ -165,6 +193,20 @@ def cena(a,s):
 
 def diario(a,s):
     j=a.jogo
+    if a.ensaio==INDICE_ARANHA:
+        livro(a,s,j.fase.name,"CADERNO DE ENSAIO")
+        texto(s,f"Semente {j.semente}   ·   {j.dificuldade}",85,148,20,AMBAR,"titulo")
+        texto(s,"Lume em âmbar. A pedra entre o abrigo e a aranha bloqueia a visão.",85,186,17,PALIDO)
+        for tr in j.solidos:
+            r=tr.rect
+            x=86+round(r.x/j.fase.width*780)
+            y=234+round(r.y*.23)
+            pygame.draw.rect(s,TEAL,(x,y,max(2,round(r.w/j.fase.width*780)),max(2,round(r.h*.23))),1)
+        for corpo,cor in ((j.lume.rect,AMBAR),(j.inimigos[0].rect,OSSO)):
+            losango(s,86+round(corpo.centerx/j.fase.width*780),234+round(corpo.centery*.23),5,cor)
+        texto(s,"Abrigo",115,379,16,PALIDO)
+        texto(s,"Tab / Esc   fechar",84,465,15,PALIDO)
+        return
     livro(a,s,"Diário de Lume","CADERNO DE CAMPO")
     tem_corte=bool(j.cartografia)
     total=len(j.diario)+2+tem_corte
@@ -242,6 +284,13 @@ def capitulo(a,s):
 
 def fim(a,s):
     j=a.jogo
+    if a.ensaio==INDICE_ARANHA:
+        livro(a,s,"Duelo concluído","GALERIA DA SEDA")
+        texto(s,f"Semente {j.semente}   ·   {j.tempo:.1f} s",84,162,23,AMBAR,"titulo")
+        texto(s,f"Avisos da aranha: {j.inimigos[0].sequencia}",84,219,18,OSSO)
+        texto(s,a.aviso_replay,84,256,16,PALIDO)
+        opcoes(a,s,a.fim_nomes(),77,346,470,40)
+        return
     chave=j.estado if j.modo=="historia" else "infinito"
     titulo,msg=FINAL[chave]
     livro(a,s,titulo,"DESFECHO")

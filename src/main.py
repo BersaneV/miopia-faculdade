@@ -11,19 +11,21 @@ os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT","1")
 import pygame
 from src import telas, ambiental
 from src.audio import Audio
-from src.ensaios import ENSAIOS, preparar_ensaio
+from src.ensaios import ENSAIOS, INDICE_ARANHA, SEMENTE_ARANHA, preparar_ensaio
 from src.ilustracao import fonte, original, tinta
 from src.memoria import Memoria
 from src.paisagem import Paisagem, hud
+from src.replay_aranha import GravacaoAranha, HistoricoCheio, gravar_tentativa, iterar_reproducao, ler_tentativa
 from src.roteiro import PROLOGO
 from src.travessia import Comando, Jornada
 
 ACEITAR = (pygame.K_RETURN,pygame.K_KP_ENTER,pygame.K_SPACE)
 CORES_AUDIO = ("bosque","corrego","taquaral","gruta")
+PAUSA_NO_ACERTO=.045
 
 class App:
     pausa_nomes=["Continuar","Diário","Ajustes","Reiniciar no marco","Salvar e voltar ao menu"]
-    def __init__(self, temporaria=False):
+    def __init__(self, temporaria=False, pasta_ensaios=None):
         pygame.mixer.pre_init(44100,-16,2,512)
         pygame.init()
         fonte.cache_clear()
@@ -41,6 +43,15 @@ class App:
         self.morte_desde=0.
         self.impacto_restante=0.
         self.ensaio=None
+        self.semente_aranha=SEMENTE_ARANHA
+        self.gravacao=None
+        self.ultimo_replay=None
+        self.aviso_replay=""
+        self.pasta_ensaios=pasta_ensaios
+        self.gravar_em_disco=not temporaria or pasta_ensaios is not None
+        self.reproducao=None
+        self.espera_replay=0.
+        self.replay_pausado=False
         self.rodando=True
         self.relogio=0.
         self.jogo=None
@@ -90,6 +101,8 @@ class App:
         self.bordas.clear()
 
     def menu(self):
+        self.fechar_tentativa("menu")
+        self.reproducao=None
         self.salvar_campanha()
         self.jogo=None
         self.ensaio=None
@@ -102,10 +115,81 @@ class App:
         return itens+["Modo infinito","Campo de testes","Como jogar","Ajustes","Recordes","Créditos","Sair"]
 
     def fim_nomes(self):
+        if self.ensaio==INDICE_ARANHA:
+            return ["Repetir a mesma semente","Voltar ao campo de testes"]
         j=self.jogo
         if j.estado=="derrota":
             return [("Retomar do marco" if j.modo=="historia" else "Tentar outra noite"),"Voltar ao menu"]
         return ["Voltar ao menu"]
+
+    def fechar_tentativa(self,motivo):
+        if self.gravacao is None:
+            return
+        gravacao=self.gravacao
+        self.gravacao=None
+        self.ultimo_replay=gravacao.documento(self.jogo,motivo)
+        self.aviso_replay="Última tentativa disponível nesta sessão."
+        if self.gravar_em_disco:
+            try:
+                arquivo=gravar_tentativa(gravacao,self.jogo,motivo,self.pasta_ensaios)
+                self.aviso_replay=f"Histórico local: {arquivo.name}"
+            except HistoricoCheio as erro:
+                self.aviso_replay=str(erro)
+            except OSError:
+                self.aviso_replay="Só nesta sessão. Confira espaço e permissão na pasta de ensaios."
+        if self.ultimo_replay["fim"]["motivo"]=="limite":
+            self.aviso_replay+=" Replay limitado ao trecho inicial."
+
+    def comecar_ensaio(self,indice,dificuldade=None):
+        self.fechar_tentativa("reinicio")
+        self.ensaio=indice
+        self.jogo=preparar_ensaio(indice,dificuldade or self.mem.prefs["dificuldade"],self.semente_aranha)
+        if indice==INDICE_ARANHA:
+            self.gravacao=GravacaoAranha(self.jogo)
+        self.jogar()
+
+    def voltar_aos_ensaios(self):
+        selecionado=self.ensaio
+        self.fechar_tentativa("saida")
+        self.reproducao=None
+        self.jogo=None
+        self.ensaio=None
+        self.mudar("ensaios")
+        if selecionado is not None:
+            self.selecao=selecionado
+        self.musica("menu")
+
+    def assistir_tentativa(self,dados):
+        self.jogo=preparar_ensaio(INDICE_ARANHA,dados["dificuldade"],dados["semente"])
+        self.ensaio=INDICE_ARANHA
+        self.reproducao=iterar_reproducao(dados,self.jogo)
+        self.espera_replay=0.
+        self.replay_pausado=False
+        self.mudar("replay")
+        self.musica("bosque")
+
+    def avancar_replay(self,dt):
+        if self.reproducao is None or self.replay_pausado:
+            return
+        if self.impacto_restante>0:
+            self.impacto_restante=max(0.,self.impacto_restante-dt)
+            return
+        self.espera_replay-=dt
+        try:
+            while self.espera_replay<=0:
+                passo=next(self.reproducao)
+                self.espera_replay+=passo
+                if passo>0:
+                    self.sons_da_jornada(self.jogo,passo)
+                    self.marcar_impacto(self.jogo)
+                    if self.impacto_restante>0:
+                        break
+        except StopIteration:
+            self.reproducao=None
+            self.aviso_replay="Reprodução conferida até o último comando."
+        except ValueError as erro:
+            self.reproducao=None
+            self.aviso_replay="Reprodução interrompida: "+str(erro)
 
     def salvar_campanha(self,forcar=True):
         j=self.jogo
@@ -119,6 +203,7 @@ class App:
             self.proximo_save=self.relogio+.65
 
     def iniciar(self,modo,continuar=False):
+        self.fechar_tentativa("menu")
         self.ensaio=None
         if continuar:
             try: self.jogo=Jornada.carregar(self.mem_camp)
@@ -207,7 +292,9 @@ class App:
             elif nome=="Continuar história": self.iniciar("historia",True)
             elif nome=="Modo infinito": self.iniciar("infinito")
             elif nome=="Sair": self.rodando=False
-            elif nome=="Campo de testes": self.mudar("ensaios")
+            elif nome=="Campo de testes":
+                self.mudar("ensaios")
+                self.selecao=INDICE_ARANHA
             else:
                 self.anterior="menu"
                 if nome=="Créditos": self.musica("creditos")
@@ -216,9 +303,7 @@ class App:
             if i==len(ENSAIOS):
                 self.menu()
                 return
-            self.ensaio=i
-            self.jogo=preparar_ensaio(i,self.mem.prefs["dificuldade"])
-            self.jogar()
+            self.comecar_ensaio(i)
         elif estado=="pausa":
             if i==0: self.jogar()
             elif i==1: self.abrir_diario("pausa")
@@ -227,18 +312,14 @@ class App:
                 self.mudar("ajustes")
             elif i==3: self.perguntar_reinicio()
             elif self.ensaio is not None:
-                self.jogo=None
-                self.ensaio=None
-                self.mudar("ensaios")
-                self.musica("menu")
+                self.voltar_aos_ensaios()
             else: self.menu()
         elif estado=="morte":
             if self.relogio-self.morte_desde < .35:
                 return
             if i==0:
                 if self.ensaio is not None:
-                    self.jogo=preparar_ensaio(self.ensaio,self.mem.prefs["dificuldade"])
-                    self.jogar()
+                    self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
                 elif self.jogo.estado=="derrota" and self.jogo.modo=="infinito":
                     self.iniciar("infinito")
                 else:
@@ -248,17 +329,22 @@ class App:
                     self.jogo.reiniciar()
                     self.salvar_campanha()
                     self.jogar()
-            else:
-                self.menu()
+            elif self.ensaio==INDICE_ARANHA: self.voltar_aos_ensaios()
+            else: self.menu()
         elif estado=="confirmar":
             if i==0: self.mudar("menu" if self.confirmacao=="nova" else "pausa")
             elif self.confirmacao=="nova": self.iniciar("historia")
+            elif self.ensaio==INDICE_ARANHA:
+                self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
             else:
                 self.jogo.reiniciar()
                 self.jogar()
         elif estado=="ajustes": self.ajustar(1)
         elif estado=="fim":
-            if i==0 and self.jogo.estado=="derrota":
+            if self.ensaio==INDICE_ARANHA:
+                if i==0: self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
+                else: self.voltar_aos_ensaios()
+            elif i==0 and self.jogo.estado=="derrota":
                 self.iniciar(self.jogo.modo,self.jogo.modo=="historia" and bool(self.mem_camp))
             else: self.menu()
         elif estado=="registro":
@@ -268,6 +354,9 @@ class App:
         elif estado in ("ajuda","creditos","recordes"): self.menu()
 
     def perguntar_reinicio(self):
+        if self.ensaio==INDICE_ARANHA:
+            self.confirmar("marco","Repetir o duelo?","A tentativa atual fica registrada. Lume e a aranha voltam às posições desta semente.","Repetir a semente")
+            return
         self.confirmar("marco","Voltar ao marco?","Lume recupera a luz. As portas abertas, as gotas e os registros continuam na jornada.","Voltar ao marco")
 
     def abrir_diario(self,origem):
@@ -285,6 +374,13 @@ class App:
             return
         if e.type in (pygame.MOUSEMOTION,pygame.MOUSEBUTTONDOWN):
             if e.type==pygame.MOUSEBUTTONDOWN and e.button!=1: return
+            if e.type==pygame.MOUSEBUTTONDOWN and self.estado=="ensaios" and self.selecao==INDICE_ARANHA:
+                if telas.SEMENTE_ANTERIOR.collidepoint(e.pos) or telas.SEMENTE_SEGUINTE.collidepoint(e.pos):
+                    self.ajustar_semente(-1 if telas.SEMENTE_ANTERIOR.collidepoint(e.pos) else 1)
+                    return
+                if self.ultimo_replay is not None and telas.VER_TENTATIVA.collidepoint(e.pos):
+                    self.assistir_tentativa(self.ultimo_replay)
+                    return
             for i,r in enumerate(self.alvos):
                 if r.collidepoint(e.pos):
                     self.selecao=i
@@ -307,7 +403,14 @@ class App:
             self.mem.guardar("preferencias",self.mem.prefs)
             return
         est=self.estado
-        if est=="prologo":
+        if est=="replay":
+            if k==pygame.K_ESCAPE: self.voltar_aos_ensaios()
+            elif k==pygame.K_SPACE: self.replay_pausado=not self.replay_pausado
+        elif est=="ensaios" and self.selecao==INDICE_ARANHA and k in (pygame.K_LEFT,pygame.K_RIGHT):
+            self.ajustar_semente(-1 if k==pygame.K_LEFT else 1)
+        elif est=="ensaios" and self.selecao==INDICE_ARANHA and k==pygame.K_v:
+            if self.ultimo_replay is not None: self.assistir_tentativa(self.ultimo_replay)
+        elif est=="prologo":
             if k==pygame.K_ESCAPE: self.jogar()
             elif k in ACEITAR: self.avancar_fala()
         elif est=="jogo":
@@ -316,10 +419,12 @@ class App:
             elif k in (pygame.K_ESCAPE,pygame.K_p): self.mudar("pausa")
             elif k==pygame.K_TAB: self.abrir_diario("jogo")
             elif k==pygame.K_q:
-                self.jogo.trocar_item()
+                if self.gravacao: self.gravacao.acao(self.jogo,"trocar_item")
+                else: self.jogo.trocar_item()
                 self.som("pagina")
             elif k==pygame.K_f:
-                self.som(self.jogo.usar_item() or "navegar")
+                resultado=self.gravacao.acao(self.jogo,"usar_item") if self.gravacao else self.jogo.usar_item()
+                self.som(resultado or "navegar")
             else: self.bordas.add(k)
         elif est=="diario":
             if k in (pygame.K_ESCAPE,pygame.K_TAB): self.mudar(self.anterior)
@@ -344,8 +449,16 @@ class App:
                 self.selecao=(self.selecao+(-1 if k in (pygame.K_UP,pygame.K_w) else 1))%quant
                 self.som("navegar")
 
+    def ajustar_semente(self,delta):
+        self.semente_aranha=(self.semente_aranha+delta)%1000000
+        self.som("navegar")
+
     def atualizar(self,dt,presso=None):
         self.relogio+=dt
+        if self.estado=="replay":
+            self.avancar_replay(dt)
+            self.mix(dt)
+            return
         if self.estado=="prologo" or self.estado=="jogo" and self.jogo.dialogo:
             self.escrever(dt)
         if self.estado=="jogo" and self.impacto_restante>0:
@@ -366,21 +479,13 @@ class App:
             self.bordas.clear()
             j=self.jogo
             etapa,raizes=j.etapa,j.restauradas
-            j.update(dt,cmd)
-            if "acerto" in j.eventos or "abatido" in j.eventos or "rebote" in j.eventos:
-                self.impacto_restante=.045
-            for ev in dict.fromkeys(j.eventos): self.som(ev)
-            for nome,x in j.sons_espaciais:
-                self.audio.tocar_local(nome,x,j.lume.rect.centerx)
-            if j.boss and "aviso" in j.eventos:
-                self.audio.tocar_local(("asa_perto","patas_perto","casco_perto","asa_perto")[j.etapa],
-                                       j.boss.x,j.lume.rect.centerx)
-            self.passo_som-=dt
-            if j.lume.pose in ("andar","correr") and self.passo_som<=0:
-                self.som("passo")
-                self.passo_som=.34
+            if self.gravacao: self.gravacao.avancar(j,dt,cmd)
+            else: j.update(dt,cmd)
+            self.marcar_impacto(j)
+            self.sons_da_jornada(j,dt)
             if j.dialogo: self.nova_fala(j.dialogo[1])
             if j.estado in ("caido","derrota") and j.motivo_morte:
+                self.fechar_tentativa("morte")
                 self.morte_desde=self.relogio
                 if j.estado=="derrota" and self.ensaio is None:
                     self.mem.terminar(j)
@@ -392,6 +497,7 @@ class App:
                 self.mudar("morte")
                 self.musica("derrota")
             elif j.estado!="jogando":
+                self.fechar_tentativa(j.estado)
                 if self.ensaio is None:
                     self.mem.terminar(j)
                 self.mudar("fim")
@@ -410,9 +516,28 @@ class App:
             else: self.salvar_campanha(False)
         self.mix(dt)
 
+    def marcar_impacto(self,j):
+        if j.estado=="jogando" and any(ev in ("acerto","abatido","rebote") for ev in j.eventos):
+            self.impacto_restante=PAUSA_NO_ACERTO
+
+    def sons_da_jornada(self,j,dt):
+        for ev in dict.fromkeys(j.eventos):
+            if ev=="aviso" and j.boss:
+                ev=j.boss.som_aviso
+                if self.audio.tocar_local(ev,j.boss.x,j.lume.rect.centerx):
+                    continue
+            self.som(ev)
+        for nome,x in j.sons_espaciais:
+            self.audio.tocar_local(nome,x,j.lume.rect.centerx)
+        self.passo_som-=dt
+        if j.lume.pose in ("andar","correr") and self.passo_som<=0:
+            self.som("passo")
+            self.passo_som=.34
+
     def mix(self,dt):
         j=self.jogo
-        ativo=self.estado=="jogo" and j and not j.dialogo
+        ativo=(self.estado=="jogo" or self.estado=="replay" and self.reproducao is not None
+               and not self.replay_pausado) and j and not j.dialogo
         self.audio.ambiente(combate=bool(ativo and j.combate),
                            energia=j.lume.energia if ativo else 100,
                            raizes=j.restauradas if j else 0,suspenso=not ativo)
@@ -420,13 +545,14 @@ class App:
 
     def desenhar(self):
         s=self.tela
-        if self.estado in ("jogo","pausa","morte"):
+        if self.estado in ("jogo","pausa","morte","replay"):
             j=self.jogo
             self.paisagem.desenhar(s,j,j.tempo)
             if self.estado=="morte":
                 telas.morte(self,s)
                 return
             hud(s,j)
+            if self.estado=="replay": telas.replay(self,s)
             if j.dialogo: telas.dialogo(self,s)
             if self.estado=="pausa": telas.pausa(self,s)
             return
@@ -446,16 +572,26 @@ class App:
                 self.desenhar()
                 pygame.display.flip()
         finally:
+            self.fechar_tentativa("janela")
             self.salvar_campanha()
             self.mem.db.close()
             pygame.quit()
 
 def principal():
     parser=argparse.ArgumentParser()
-    parser.add_argument("--smoke",action="store_true",help="Verifica menu, início e desenho do jogo e encerra.")
+    modo=parser.add_mutually_exclusive_group()
+    modo.add_argument("--smoke",action="store_true",help="Verifica menu, início e desenho do jogo e encerra.")
+    modo.add_argument("--reproduzir",type=Path,metavar="TENTATIVA.json",help="Assistir a uma tentativa local da aranha.")
     parser.add_argument("--captura",type=Path)
     args=parser.parse_args()
+    try:
+        dados=ler_tentativa(args.reproduzir) if args.reproduzir is not None else None
+    except (ValueError,OSError) as erro:
+        parser.error(str(erro))
     app=App(temporaria=args.smoke)
+    if dados is not None:
+        app.ultimo_replay=dados
+        app.assistir_tentativa(dados)
     if not args.smoke:
         app.rodar()
         return

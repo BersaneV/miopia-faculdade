@@ -74,7 +74,7 @@ FASES = (
         "Bosque das Samambaias",
         ((0, 1380), (1480, LARGURA)),
         ((310, 376, 130), (481, 312, 174), (680, 248, 127), (985, 240, 220),
-         (1270, 372, 110)),
+         (1270, 372, 110), (321, 228, 109)),
         ((1160, 350, 110, 68),),
         (O("nira", "npc", 224, CHAO, "Nira"), O("vespera", "npc", 778, 248, "Véspera"),
          O("registro", "registro", 708, 248, "Mapa do berçário"),
@@ -233,6 +233,9 @@ def ampliar(fase, ramal):
 
 
 FASES = tuple(ampliar(fase, ramal) for fase,ramal in zip(FASES,RAMAIS))
+# A gota da varanda nova vai ao fim da lista: os IDs de coleta de saves
+# anteriores continuam apontando para as mesmas gotas no Bosque.
+FASES = (replace(FASES[0], orvalhos=FASES[0].orvalhos + ((374, 201),)), *FASES[1:])
 
 # Vozes mudam com o mecanismo local e com a restauração da mata.
 FALAS = {

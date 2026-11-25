@@ -5,7 +5,7 @@ import math
 import pygame
 from .arte_combate import inimigo, projeteis
 from . import corte_vertical as corte
-from .ilustracao import AMBAR, OSSO, PALIDO, TEAL, brilho, imagem, losango, sprite, texto
+from .ilustracao import AMBAR, OSSO, PALIDO, TEAL, brilho, imagem, losango, manivela, sprite, texto
 
 
 @lru_cache(maxsize=1)
@@ -26,7 +26,7 @@ def suportes():
         pygame.draw.polygon(out,(37,46,40,220),margem+list(reversed(outra)))
         pygame.draw.lines(out,(83,91,73,210),False,margem,2)
         for tr in corte.terrenos():
-            if tr.tipo!="plataforma" or not 338 < tr.rect.top < 970: continue
+            if tr.tipo!="plataforma" or tr.rect.left>=corte.BOCA_LESTE or not 338 < tr.rect.top < 970: continue
             if (tr.rect.centerx<800) != (ramo==1): continue
             h=tr.rect.top
             x=centro+round(math.sin((h+58)*.004)*36)
@@ -39,6 +39,24 @@ def suportes():
         yy=1485-n*9
         pygame.draw.line(out,(127,143,119,220),(814,yy),(814+(10 if n%3==0 else 5),yy-1),2)
     pygame.draw.line(out,(103,114,94,210),(812,1490),(812,1392),3)
+    # A oficina e os berços compartilham a mesma armação. As cordas chegam
+    # aos apoios reais, assim a descida ainda é legível quando o brilho fecha.
+    for x in (1780,2318):
+        pygame.draw.lines(out,(51,60,48),False,[(x-38,1818),(x+4,1428),(x-8,1030),(x,728)],15)
+        pygame.draw.line(out,(102,109,81),(x-5,778),(x-29,1792),2)
+    pygame.draw.lines(out,(123,111,77),False,[(1515,970),(1780,723),(2070,741),(2320,708)],5)
+    for tr in corte.terrenos():
+        if tr.tipo!="plataforma" or tr.rect.left<1590: continue
+        x,y=tr.rect.centerx,tr.rect.top
+        poste=1780 if x<1970 else 2318
+        pygame.draw.line(out,(109,103,79),(poste,y-86),(x,y+4),2)
+        pygame.draw.lines(out,(75,85,66),False,[(x-42,y+5),(x-20,y+25),(x+28,y+21),(x+50,y+5)],4)
+        if y>1090:
+            # Borda de uma folha dobrada que já serviu de berço.
+            pygame.draw.arc(out,(150,147,105),(x-32,y-13,66,21),3.14,6.28,2)
+    for x in (1510,1695,1888,2093,2302):
+        for y in (1789,1795,1803):
+            pygame.draw.line(out,(77,117,115),(x-30,y),(x+53,y-2),1)
     return out
 
 def desenhar_ponto(camada,o,j,cx):
@@ -56,8 +74,11 @@ def desenhar_ponto(camada,o,j,cx):
             pygame.draw.line(camada,(151,129,86),(x,o.y-20),(x,o.y),3)
             losango(camada,x,o.y-11,6,AMBAR,False)
         return
-    item={"valvula":"valvula", "refugio":"refugio", "registro":"registro"}[o.tipo]
-    w,h={"valvula":(46,53),"refugio":(72,61),"registro":(32,25)}[o.tipo]
+    if o.tipo=="valvula":
+        manivela(camada,x,o.y,46,53,j.manivela_girada(o))
+        return
+    item={"refugio":"refugio", "registro":"registro"}[o.tipo]
+    w,h={"refugio":(72,61),"registro":(32,25)}[o.tipo]
     sprite(camada,"obj_"+item,x,o.y,w,h)
 
 
@@ -84,7 +105,7 @@ def desenhar(s,j,t,nivel_brilho):
         pygame.draw.line(camada,cor,(x-cx,298),(x-cx,1828),1)
     for y in range(320,1828,32):
         pygame.draw.line(camada,cor,(1036-cx,y+3),(1044-cx,y),1)
-    for tr in corte.terrenos():
+    for tr in j.solidos:
         if tr.rect.bottom+30>=cy and tr.rect.top-18<=cy+540:
             i=3 if tr.rect.y>=1200 else 0
             terreno(camada,tr,cx,i)
@@ -129,6 +150,8 @@ SALAS_MAPA = (
     ("arquivo","Arquivo da Casca","Desvio no oeste",(63,1065,343,217),(92,77,62)),
     ("poco","Poço da Seiva","Marco e régua de cheia",(124,1360,1205,176),(58,72,81)),
     ("cisterna","Cisterna das Duas Margens","Contrapeso e canal",(36,1670,1358,179),(54,76,82)),
+    ("estaleiro","Estaleiro das Folhas","Oficina e ponte do Córrego",(1438,734,957,316),(94,90,63)),
+    ("viveiro","Viveiro Afundado","Berços e comporta oeste",(1440,1180,950,664),(62,91,88)),
 )
 
 
@@ -152,7 +175,9 @@ def mapa(s,j,rect):
         ("copa","galeria",420,360,148,479),("copa","galeria",1002,360,127,479),
         ("galeria","poco",602,990,132,400),("galeria","poco",1001,990,153,400),
         ("arquivo","galeria",389,1107,268,91),("poco","cisterna",550,1464,146,241),
-        ("poco","cisterna",1038,1464,147,241)):
+        ("poco","cisterna",1038,1464,147,241),
+        ("galeria","estaleiro",1340,928,185,66),
+        ("estaleiro","viveiro",2145,1020,110,210)):
         if "viu_"+origem in vistos and "viu_"+fim in vistos:
             pg=faixa(x,y,w,h)
             pygame.draw.rect(s,(49,65,64),pg)
@@ -162,7 +187,10 @@ def mapa(s,j,rect):
         pg=faixa(*geo)
         pygame.draw.rect(s,cor,pg)
         pygame.draw.rect(s,tuple(min(255,v+61) for v in cor),pg,1)
-    for tr in corte.terrenos():
+    if {"viveiro_aberto","viu_cisterna","viu_viveiro"}<=vistos:
+        pygame.draw.rect(s,(130,155,128),faixa(1350,1740,167,76))
+    for tr in corte.terrenos("viveiro_aberto" in vistos):
+        if tr.tipo in ("parede","tranca"): continue
         ident=corte.setor(tr.rect.y,tr.rect.centerx)[0]
         if "viu_"+ident not in vistos: continue
         pygame.draw.line(s,(109,131,117),tela(tr.rect.left,tr.rect.top),tela(tr.rect.right,tr.rect.top),1)
@@ -170,7 +198,7 @@ def mapa(s,j,rect):
         if "viu_"+corte.setor(o.y,o.x)[0] not in vistos: continue
         if o.tipo=="passagem":
             losango(s,*tela(o.x,o.y),4,AMBAR,False)
-        elif o.id in ("marco_poco","ralo_cisterna","selo_copa"):
+        elif o.id in ("marco_poco","marco_estaleiro","ralo_cisterna","selo_copa"):
             pygame.draw.circle(s,PALIDO,tela(o.x,o.y),3,1)
     if "ralo_aberto" in vistos:
         cx,_=tela(1040,0)
@@ -179,7 +207,7 @@ def mapa(s,j,rect):
     if j.em_vertical:
         losango(s,*tela(*j.lume.rect.center),5,AMBAR)
     tx=desenho.right+16
-    passo=max(27,min(43,(r.h-26)//5))
+    passo=max(22,min(43,(r.h-26)//len(SALAS_MAPA)))
     for n,(ident,nome,dica,geo,cor) in enumerate(SALAS_MAPA):
         aberto="viu_"+ident in vistos
         atual=j.em_vertical and nome==j.setor_vertical

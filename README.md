@@ -24,7 +24,7 @@ Ver a travessia em movimento.
 | Comando | Ação |
 |---|---|
 | A / D ou setas esquerda e direita | Mover |
-| Espaço | Saltar. No ar, segure para planar durante a descida, por até 1,12 s. Pousar recupera as asas. Nas paredes riscadas, aperte Espaço de novo para saltar para a parede oposta. |
+| Espaço | Saltar. Solte e aperte outra vez no ar para o salto duplo. Segure durante a queda para planar por até 1,12 s. Pousar recupera as asas. Encostado à parede riscada, o novo toque impulsiona Lume para o lado oposto. |
 | S ou seta para baixo | Agachar. Segure para baixo e aperte Espaço sobre grade, galho elevado ou apoio para passar ao nível inferior. Terra e pontes firmes sustentam Lume. |
 | Shift + direção | Deslizar |
 | E | Usar mecanismos, subir cordas, descansar e conversar |

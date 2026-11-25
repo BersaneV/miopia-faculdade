@@ -7,7 +7,7 @@ import pygame
 from .arte_arena import sinais_encontro
 from .arte_combate import inimigo, projeteis, golpe_lume, tranca
 from .ilustracao import (original, AMBAR, OSSO, PALIDO, PERIGO, ROMANOS, TEAL, TINTA, brilho, imagem,
-                         losango, painel, placa, sprite, texto)
+                         losango, manivela, painel, placa, sprite, texto)
 
 CORES = ((77,102,86),(81,119,119),(127,116,72),(97,86,106))
 POSES = {"pulo":4, "queda":5, "agachar":6, "deslize":7, "dano":8,
@@ -100,6 +100,22 @@ def grade(s,r):
     for x in range(r.left+3,r.right-7,9):
         pygame.draw.line(s,(147,147,110),(x,r.top+1),(x+7,r.top+8),1)
         pygame.draw.line(s,(85,93,80),(x,r.top+8),(x+7,r.top+1),1)
+
+
+def sustentar_galho_do_duelo(s,j,cx):
+    x,y,w=j.fase.plataformas[0]
+    topo=round(x-cx)
+    base=j.checkpoint[1]
+    # A forquilha fica atrás do patamar e deixa a face de pouso contínua.
+    raiz=[(topo+14,base),(topo+40,base-31),(topo+53,y+47),(topo+37,y+9)]
+    ponta=[raiz[2],(topo+87,y+32),(topo+w-17,y+9)]
+    pygame.draw.lines(s,(51,57,45),False,raiz,13)
+    pygame.draw.lines(s,(68,71,54),False,ponta,7)
+    pygame.draw.lines(s,(113,105,76),False,[(px-3,py) for px,py in raiz],2)
+    for n in (0,1,2):
+        px=topo+w-26+n*8
+        pygame.draw.lines(s,(93,102,89),False,[(px,y+10),(px+12,y+30-n*4),
+                                                (px+29,y+13)],1)
 
 
 def terreno(s,t,camera,i):
@@ -230,6 +246,9 @@ def objeto(s,o,j,cx,tempo):
         losango(s,x-10,o.y-34,3)
         return
     arte,w,h=OBJETOS[o.tipo]
+    if o.tipo=="valvula":
+        manivela(s,x,o.y,w,h,j.manivela_girada(o))
+        return
     if o.tipo=="corda":
         pygame.draw.line(s,(162,134,91),(x,216),(x,o.y-65),3)
         for y in range(219,o.y-64,9): pygame.draw.line(s,(92,75,56),(x-2,y),(x+2,y+3))
@@ -268,6 +287,13 @@ def lume(s,l,cx,t):
     golpe_lume(s,l,cx)
     if l.iframes<=0 or int(t*14)%3!=1:
         sprite(s,f"lume_{fr}",x,y+1,w,h,l.face<0)
+    if l.batida_asa>0:
+        # Dois rastros curtos marcam o impulso extra sem iluminar a tela inteira.
+        abertura=1-l.batida_asa/.18
+        for lado in (-1,1):
+            pontos=[(x+lado*7,y-18),(x+lado*(16+10*abertura),y-25+12*abertura),
+                    (x+lado*(23+15*abertura),y-20+23*abertura)]
+            pygame.draw.lines(s,AMBAR,False,pontos,2)
     if l.slide>0:
         for n in range(4):
             pygame.draw.line(s,AMBAR,(x-l.face*(17+n*8),y-4-n),(x-l.face*(24+n*9),y-4-n),1)
@@ -338,6 +364,7 @@ class Paisagem:
             for n in range(4):
                 y=nivel+n*10
                 pygame.draw.lines(s,(108,154,145),False,[(left+k,y+math.sin(k*.07+t*2)*2) for k in range(0,right-left+1,10)],1)
+        if hasattr(j,"sala_id"): sustentar_galho_do_duelo(s,j,cx)
         for tr in j.solidos: terreno(s,tr,cx,i)
         for o in j.objetos: objeto(s,o,j,cx,t)
         if "raiz" in j.flags or "no" in j.flags: mata_reacesa(s,j,cx,t)
@@ -384,17 +411,22 @@ def hud(s,j):
     pygame.draw.rect(s,(50,62,62),(33,49,184,5))
     pygame.draw.rect(s,AMBAR,(33,49,round(184*max(0,min(100,j.lume.energia))/100),5))
     for n in range(j.vidas_iniciais): losango(s,38+n*13,67,3,AMBAR,n<j.lume.vidas)
-    texto(s,f"Orvalho  {min(j.orvalhos,3)} / 3",217,57,14,PALIDO,"normal","right")
+    duelo=hasattr(j,"sala_id")
+    leitura=f"Avisos   {j.inimigos[0].sequencia}" if duelo else f"Orvalho  {min(j.orvalhos,3)} / 3"
+    texto(s,leitura,217,57,14,PALIDO,"normal","right")
     painel(s,(682,18,259,64))
-    texto(s,("TRAVESSIA   "+ROMANOS[j.etapa]) if j.modo=="historia" else
-          f"INFINITO   {j.volta*4+j.etapa+1}   ·   {max(0,int(j.tempo_restante))} s",925,24,12,AMBAR,"forte","right")
+    if duelo: local=f"ENSAIO    •    SEMENTE {j.semente}"
+    elif j.modo=="historia": local="TRAVESSIA   "+ROMANOS[j.etapa]
+    else: local=f"INFINITO   {j.volta*4+j.etapa+1}   ·   {max(0,int(j.tempo_restante))} s"
+    texto(s,local,925,24,12,AMBAR,"forte","right")
     texto(s,j.setor_vertical if j.em_vertical else j.fase.name,925,44,20,OSSO,"titulo","right")
-    item=j.bolsa.item
-    qtd="ferramenta" if item.permanente and j.bolsa.quantidade else str(j.bolsa.quantidade)
-    painel(s,(19,86,213,32),False)
-    sprite(s,"item_"+item.id,38,115,24,24)
-    texto(s,f"{item.nome}  ·  {qtd}",57,88,13,PALIDO,"forte")
-    texto(s,"Q  trocar   F  usar",57,104,11,PALIDO)
+    if not duelo:
+        item=j.bolsa.item
+        qtd="ferramenta" if item.permanente and j.bolsa.quantidade else str(j.bolsa.quantidade)
+        painel(s,(19,86,213,32),False)
+        sprite(s,"item_"+item.id,38,115,24,24)
+        texto(s,f"{item.nome}  ·  {qtd}",57,88,13,PALIDO,"forte")
+        texto(s,"Q  trocar   F  usar",57,104,11,PALIDO)
 
     if j.boss and not j.boss.vencido:
         painel(s,(258,17,402,64))
