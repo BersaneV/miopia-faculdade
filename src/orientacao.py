@@ -189,6 +189,15 @@ def _subsolo(j):
 def objetivo_atual(j):
     if hasattr(j, "sala_id"):
         return None
+    if j.boss and j.boss.coro_iniciado and not j.boss.vencido:
+        from .ultimo_chamado import alvo as ninho_atual
+        x, _ = ninho_atual(j.boss)
+        sinal = j.boss.coro_sinais
+        detalhe = 'Use K perto do ninho para devolver o sinal.'
+        if j.boss.coro_gota:
+            detalhe += ' Use E no ninho para recolher orvalho e repor brilho.'
+        return _alvo(j, f'ninho_chamado_{sinal}', 'Ninho do Último Chamado',
+                     f'Devolva o sinal {sinal+1}/3 no ninho', x, j.boss.chao, detalhe)
     from .resgates import orientar as orientar_resgates
     resgate=orientar_resgates(j)
     if resgate is not None:return resgate
