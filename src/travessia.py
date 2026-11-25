@@ -6,6 +6,7 @@ import math
 import pygame
 from .visao import DURACAO, Vestigio
 from .combate import Arma, Inimigo
+from .taticas import Habitante
 from .fases import VIGIA_X, TRANCA_X
 from .fases import (ARENA, CHAO, FIM_ARENA, FALAS, FASES, MEIO, RAIZ, SAIDA,
                     RAMAIS, Objeto, Terreno, montar_infinito, terrenos)
@@ -279,9 +280,9 @@ class Jornada:
         self.variante = ""
         if self.modo == "infinito":
             self.variante, inimigos, self.gotas, self.gota_minuto = montar_infinito(indice, self.volta)
-        self.inimigos = [Inimigo(*e, dificuldade=self.dificuldade) for e in inimigos if "inimigo_" + str(e[1]) not in self.flags]
+        self.inimigos = [Habitante(*e, dificuldade=self.dificuldade) for e in inimigos if "inimigo_" + str(e[1]) not in self.flags]
         if subsolo.ativo(self) and "inimigo_2860" not in self.flags:
-            self.inimigos.append(Inimigo("aranha",2860,1102,dificuldade=self.dificuldade))
+            self.inimigos.append(Habitante("aranha",2860,1102,dificuldade=self.dificuldade))
         for e in self.inimigos:
             e.guarda = self.tranca_fechada and e.origem[0] == VIGIA_X and e.tipo == "carabideo"
         # No Bosque, a primeira silhueta a aparecer precisa ser a de Lume.
@@ -299,7 +300,7 @@ class Jornada:
     def salvar(self):
         """Salva o progresso assentado. Objetos transitórios da arena renascem no marco."""
         return {
-            "versao": 3, "explorado": sorted(self.explorado), "missao": self.missao,
+            "versao": 3, "mapa_grade": 24, "explorado": sorted(self.explorado), "missao": self.missao,
             "corte": {"ativo": self.em_vertical, "marco": self.marco_vertical,
                       "memoria": sorted(self.cartografia)}, "modo": self.modo, "dificuldade": self.dificuldade,
             "etapa": self.etapa, "volta": self.volta, "vidas": self.lume.vidas,
@@ -321,10 +322,11 @@ class Jornada:
         jogo = cls(dados["modo"], dados["dificuldade"], etapa)
         jogo.volta = max(0, int(dados["volta"]))
         memoria = dados.get("explorado", [])
-        if not isinstance(memoria,list) or len(memoria)>10000 or not all(isinstance(v,str) and len(v)<80 for v in memoria):
+        if not isinstance(memoria,list) or len(memoria)>60000 or not all(isinstance(v,str) and len(v)<80 for v in memoria):
             raise ValueError("Mapa descoberto inválido")
-        jogo.explorado = set(memoria)
-        jogo.missao = "secundaria" if dados.get("missao")=="secundaria" else "principal"
+        jogo.explorado = set(memoria) if dados.get("mapa_grade")==24 else set()
+        escolha=dados.get("missao")
+        jogo.missao = escolha if escolha in ("principal","secundaria","entrega_mimo",*(f"pedido_{i}" for i in range(4))) else "principal"
         for visita in dados["fases"]:
             nivel = int(visita["etapa"])
             if not 0 <= nivel < len(FASES):
@@ -377,13 +379,13 @@ class Jornada:
         portatil = 90 + .38 * max(0., min(100., self.lume.energia))
         if self.bolsa.luz_ate > self.tempo:
             portatil += 65
+        if self.boss and not self.boss.vencido:
+            portatil += 22
         return portatil
 
     def visivel(self, centro, margem=0):
-        if math.dist(centro, self.lume.rect.center) <= self.raio + margem:
-            return True
-        return any(math.dist(centro, (v.x, v.y)) <= v.raio(self.tempo) + margem
-                   for v in self.vestigios)
+        from .visao import ponto_visivel
+        return ponto_visivel(self,centro,margem)
 
     @property
     def combate(self):
@@ -401,9 +403,13 @@ class Jornada:
     def solidos(self):
         if self.em_vertical:
             return corte_vertical.terrenos("viveiro_aberto" in self.cartografia)
-        out = terrenos(self.etapa, self.flags)
-        if subsolo.ativo(self):
-            out = subsolo.terrenos(out)
+        geometria=frozenset(self.flags.intersection(("dreno","ponte","no","contrapeso",self.fase.preparo,"chefe")))
+        ident=(self.etapa,geometria,subsolo.ativo(self))
+        if getattr(self,"_geometria_id",None)!=ident:
+            base=terrenos(self.etapa,geometria)
+            self._geometria_base=tuple(subsolo.terrenos(base) if subsolo.ativo(self) else base)
+            self._geometria_id=ident
+        out=list(self._geometria_base)
         if self.tranca_fechada:
             out.append(Terreno(pygame.Rect(TRANCA_X, 223, 36, CHAO-223), "tranca"))
         if self.boss:
@@ -416,6 +422,8 @@ class Jornada:
             return corte_vertical.objetos(self)
         out = [o for o in self.fase.objetos if (not o.requer or o.requer in self.flags)
                and not (o.id in self.flags and o.tipo in ("peca", "registro", "brasa", "reserva"))]
+        if "encomenda_recolhida" in self.flags:
+            out=[o for o in out if o.id!="encomenda_mimo"]
         deslocados = {}
         if self.etapa == 1 and "ponte" in self.flags:
             deslocados["fio"] = (1567, CHAO)
@@ -498,6 +506,9 @@ class Jornada:
 
     @property
     def objetivo(self):
+        if getattr(self,"ensaio_tatico",False):
+            vivos=sum(e.ativo for e in self.inimigos if e.origem[0] in (1548,1660))
+            return f"Afaste a patrulha da margem · {vivos} inimigo(s)" if vivos else "Patrulha vencida · Esc volta ao Campo de testes"
         from .orientacao import objetivo_atual
         alvo = objetivo_atual(self)
         if alvo:
@@ -519,7 +530,8 @@ class Jornada:
             if 622 < x < 1100: return "J, J, J: três cortes. No ar, S + J rebate sobre o alvo."
             if 1135 < x < 1285: return "S  agachar     Shift + direção  deslizar"
             if 1415 < x < 1720: return "J  golpe curto     K  clarão (22 de luz)"
-        if self.etapa == 1 and 790 < x < 1120: return "Shift + direção para deslizar contra a corrente."
+        if self.etapa == 1 and 750 < x < 1120:
+            return "A marca de Casca mostra a peça da ponte. Siga o sulco sob a raiz; direção + Shift vence a corrente."
         if MEIO-50 < x < MEIO+100: return RAMAIS[self.etapa].nome + " · marco do ramal"
         if self.etapa == 0 and 1970 < x < 2495:
             return "Troncos riscados: salte encostado, depois aperte Espaço a cada troca de parede."
@@ -552,6 +564,7 @@ class Jornada:
         self.lume.bonus_dano = self.bolsa.bonus_dano
         self.lume.bonus_velocidade = self.bolsa.bonus_velocidade
         self.lume.custo_clarao = 18. if self.bolsa.estoque["resina"] else 22.
+        self.lume.tanino = self.bolsa.tanino_ate>self.tempo
 
     def notificar(self, texto, segundos=3.8):
         self.aviso, self.aviso_t = texto, segundos
@@ -658,6 +671,21 @@ class Jornada:
             narrativa.conversar(self, o.nome, FALAS[o.nome][estado])
         elif o.tipo == "reserva":
             narrativa.abrir_reserva(self)
+        elif o.tipo == "encomenda":
+            if "encomenda_recolhida" not in self.flags:
+                self.flags.update(("encomenda_aceita","encomenda_recolhida"))
+                self.missao="entrega_mimo"
+                self.notificar("Pacote de Mimo na bolsa de missão. Leve-o a Mimo no abrigo da entrada.",7.)
+                self.memorizar("A mochila dos casulos","Um pacote de tanino ficou na varanda alta. Mimo prometeu preparar a lâmina para atravessar carapaças.")
+                self.eventos.append("coleta")
+        elif o.id == "placa_canal":
+            self.flags.add("pista_canal")
+            self.dialogo=("A peça levada pela cheia",
+                "Casca desenhou a roda sem pino e uma peça de três dentes. Um sulco de metal segue sob a raiz baixa. "
+                "Drene a água na roda acima de Casca. Depois, direção + Shift atravessa a corrente. "
+                "Use E junto ao metal para recolher a lingueta e encaixá-la na roda da ponte.")
+            self.memorizar(*self.dialogo)
+            self.eventos.append("pagina")
         elif o.tipo == "registro":
             self.flags.add(o.id)
             self.dialogo = self.fase.registro
@@ -751,7 +779,7 @@ class Jornada:
                 return
         clarao = self.lume.atacar(cmd)
         if clarao:
-            self.vestigios.append(Vestigio(*self.lume.rect.center, self.tempo, 11. if self.bolsa.luz_ate>self.tempo else DURACAO))
+            self.vestigios.append(Vestigio(*self.lume.rect.center, self.tempo, 9. if self.bolsa.luz_ate>self.tempo else DURACAO))
             self.eventos.append("pulso")
             if not self.em_vertical:
                 narrativa.responder_chamado(self)
@@ -766,11 +794,11 @@ class Jornada:
             self.passo(dt / passos, cmd if i == 0 else retido, clarao and i == 0)
             if self.estado != "jogando":
                 break
+        from .descoberta import revelar
+        revelar(self)
 
     def passo(self, dt, cmd, clarao):
         l = self.lume
-        from .descoberta import revelar
-        revelar(self)
         if l.chao and not l.em_corda and l.energia>0 and any(
                 abs(l.rect.bottom-t.rect.top)<1.5 and l.rect.right>t.rect.left
                 and l.rect.left<t.rect.right for t in self.solidos):
@@ -876,6 +904,8 @@ class Jornada:
         for e in self.inimigos:
             if not e.ativo:
                 continue
+            e.companhia=next((outro.rect.centerx for outro in self.inimigos if outro is not e
+                and outro.ativo and abs(outro.rect.centerx-e.rect.centerx)<350),None)
             resultado = e.acertar(lume.arma, golpe, clarao, lume)
             if resultado:
                 self.eventos.append(resultado)

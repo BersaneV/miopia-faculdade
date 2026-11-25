@@ -490,13 +490,14 @@ class Encontro:
             self.ultimo_corte=identificador
             self.ultimo_golpe_t=self.relogio
             if not fraco:
-                self.vida=max(0.,self.vida-2.*bonus_dano)
-                eventos.append("acerto")
+                dano=(7.,3.,0.,4.)[self.indice] if clarao else 2.*bonus_dano
+                self.vida=max(0.,self.vida-dano)
+                eventos.append("acerto" if dano else "bloqueio")
                 if self.vida<=0:
                     self.vencido=True;self.estado="repouso"
                     eventos.append("chefe_resolvido")
                     return eventos
-        dt *= 1.2
+        dt *= 1.35 if self.indice==0 else 1.2
         self.tempo -= dt
         if interagir:
             self._usar(corpo, eventos)

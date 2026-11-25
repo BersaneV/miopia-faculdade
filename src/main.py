@@ -21,7 +21,7 @@ from src.travessia import Comando, Jornada
 
 ACEITAR = (pygame.K_RETURN,pygame.K_KP_ENTER,pygame.K_SPACE)
 CORES_AUDIO = ("bosque","corrego","taquaral","gruta")
-PAUSA_NO_ACERTO=.045
+PAUSA_NO_ACERTO=.022
 
 class App:
     pausa_nomes=["Continuar","Diário","Ajustes","Reiniciar no marco","Salvar e voltar ao menu"]
@@ -61,6 +61,7 @@ class App:
         self.bordas=set()
         self.anterior="menu"
         self.pagina=0
+        self.pedido_cursor=0
         self.quadro=0
         self.fala=""
         self.letras=0
@@ -362,6 +363,9 @@ class App:
     def abrir_diario(self,origem):
         self.anterior=origem
         self.pagina=0
+        from .missoes import conhecidas, rastreada
+        ids=[m.id for m in conhecidas(self.jogo)]
+        self.pedido_cursor=ids.index(rastreada(self.jogo).id)
         self.mudar("diario")
         self.som("pagina")
 
@@ -427,6 +431,18 @@ class App:
                 self.som(resultado or "navegar")
             else: self.bordas.add(k)
         elif est=="diario":
+            if self.pagina==1:
+                from .missoes import conhecidas, selecionar
+                lista=conhecidas(self.jogo)
+                self.pedido_cursor%=len(lista)
+                if k in (pygame.K_UP,pygame.K_DOWN,pygame.K_w,pygame.K_s):
+                    self.pedido_cursor=(self.pedido_cursor+(-1 if k in (pygame.K_UP,pygame.K_w) else 1))%len(lista)
+                    self.som("pagina")
+                    return
+                if k in (pygame.K_r,pygame.K_RETURN):
+                    if selecionar(self.jogo,lista[self.pedido_cursor].id):
+                        self.pagina=0
+                    return
             if k==pygame.K_r:
                 self.jogo.missao="secundaria" if self.jogo.missao=="principal" else "principal"
                 self.jogo.notificar("Rastreando missão "+self.jogo.missao)

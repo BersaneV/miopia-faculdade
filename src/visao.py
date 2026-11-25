@@ -2,8 +2,8 @@
 from dataclasses import dataclass
 import math
 
-DURACAO = 6.5
-ALCANCE = 1200
+DURACAO = 5.5
+ALCANCE = 340
 
 @dataclass(frozen=True)
 class Vestigio:
@@ -22,3 +22,16 @@ class Vestigio:
             return ALCANCE
         u = (idade - 2.) / (self.duracao - 2.)
         return round(ALCANCE * (1. - u*u*(3.-2.*u)))
+
+
+def fontes(j):
+    return [(*j.lume.rect.center,j.raio),*((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios)]
+
+
+def ponto_visivel(j,ponto,margem=0,terrenos=None):
+    """Luz com oclusão. Paredes e patamares impedem descobrir o outro lado."""
+    terrenos=j.solidos if terrenos is None else terrenos
+    for x,y,raio in fontes(j):
+        if math.dist(ponto,(x,y))>raio+margem:continue
+        if not any(t.rect.clipline((x,y),ponto) for t in terrenos):return True
+    return False

@@ -4,9 +4,9 @@ import pygame
 from .ilustracao import AMBAR, OSSO, PALIDO, PERIGO, brilho, imagem, losango, sprite
 from .combate import CORTES
 
-CORES = {"fio": (159, 209, 211), "ferrao": (253, 185, 100), "onda": (226, 151, 118)}
+CORES = {"fio": (159, 209, 211), "ferrao": (253, 185, 100), "onda": (226, 151, 118), "eco": (153,175,216),"veneno":(163,197,104)}
 MEDIDAS = {"morcego": (65, 44), "aranha": (65, 39), "vespa": (61, 42),
-           "sombra": (55, 47), "carabideo": (73, 46)}
+           "sombra": (55, 47), "carabideo": (73, 46), "cobra":(74,36)}
 def efeito(s, nome, centro, dimensoes, espelho=False):
     if nome=="avanco": nome="corte3"
     asset = "efeito_" + nome
@@ -60,7 +60,20 @@ def corpo(s,e,cx,t):
         w += 8
         h -= 2
     asset = f"inimigo_{e.tipo}_{pose}"
-    sprite(s, asset, x, y+2, w, h, e.frente<0)
+    if e.tipo=="cobra":
+        corpo_cobra=[(x-e.frente*30+n*4,y-7-math.sin(t*7+n*.65)*4) for n in range(13)]
+        pygame.draw.lines(s,(40,56,33),False,corpo_cobra,12)
+        pygame.draw.lines(s,(110,137,71),False,corpo_cobra,7)
+        for n,p in enumerate(corpo_cobra[::2]):pygame.draw.circle(s,(170,166,92),(round(p[0]),round(p[1]-2)),2)
+        cabeca=(round(x+e.frente*24),round(y-16))
+        pygame.draw.ellipse(s,(125,145,78),(cabeca[0]-11,cabeca[1]-7,22,14))
+        pygame.draw.ellipse(s,(45,61,34),(cabeca[0]-11,cabeca[1]-7,22,14),1)
+        pygame.draw.line(s,(190,183,119),(cabeca[0]-5,cabeca[1]+4),(cabeca[0]+e.frente*8,cabeca[1]+3),1)
+        pygame.draw.circle(s,AMBAR,(cabeca[0]+e.frente*5,cabeca[1]-2),2)
+        if e.estado in ("aviso","investida"):
+            pygame.draw.line(s,PERIGO,(cabeca[0]+e.frente*10,cabeca[1]+2),(cabeca[0]+e.frente*20,cabeca[1]+3),2)
+    else:
+        sprite(s, asset, x, y+2, w, h, e.frente<0)
     if e.tipo == "sombra":
         for i in range(4):
             ponta = x-e.frente*(22+i*5)
@@ -72,6 +85,9 @@ def corpo(s,e,cx,t):
             a=i*math.pi/2+.48
             pygame.draw.line(s, OSSO, (x+math.cos(a)*raio,y-h/2+math.sin(a)*raio),
                              (x+math.cos(a)*(raio+5),y-h/2+math.sin(a)*(raio+5)),2)
+    if getattr(e,"lentidao",0)>0:
+        for n in range(5):
+            pygame.draw.circle(s,AMBAR,(round(x+math.sin(t*2+n*1.7)*28),round(y-h/2+math.cos(t*2+n)*19)),2)
     if e.guarda:
         losango(s,x,y-h-17,5,PERIGO,False)
         pygame.draw.line(s,AMBAR,(x-8,y-h-17),(x-4,y-h-17),1)
@@ -91,6 +107,10 @@ def aviso(s,e,cx,lume,t):
     tx,ty=e.alvo.x-cx,e.alvo.y
     pct = min(1., 1-e.t/(e.ficha.aviso/e.ritmo)) if e.estado=="aviso" else 1.
     cor = PERIGO if e.estado=="investida" else (196,142,116)
+    if getattr(e,"acao_atual","")=="fenda_dupla":
+        for dx in (-48,48):
+            pygame.draw.line(s,cor,(tx+dx-20,ty-3),(tx+dx+20,ty-3),2)
+        return
     if e.tecnica=="fenda":
         largura=round(54*pct)
         pygame.draw.line(s,cor,(tx-largura*.5,ty-3),(tx+largura*.5,ty-3),2)
@@ -124,7 +144,10 @@ def projeteis(s,e,cx,lume,raio,visivel=None):
         perto = p.pos.distance_to(lume.rect.center)<max(raio+70,164)
         if -30<x<990 and (perto or visivel and visivel(p.pos,8)):
             cor=CORES[p.tipo]
-            if p.tipo=="onda":
+            if p.tipo in ("eco","veneno"):
+                pygame.draw.circle(s,cor,(round(x),round(y)),8,2)
+                pygame.draw.circle(s,PALIDO,(round(x),round(y)),3,1)
+            elif p.tipo=="onda":
                 efeito(s,"onda",(round(x),round(y)),(55,25),p.vel.x<0)
                 pygame.draw.lines(s,cor,False,[(x-17,y+5),(x-7,y-5),(x,y+3),(x+7,y-6),(x+16,y+5)],2)
             else:

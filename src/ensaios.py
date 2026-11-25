@@ -37,8 +37,10 @@ ENSAIOS = (
            "Entre pela direita. Observe as duas trajetórias de seda depois do primeiro corte. A roda a oeste abre a cortina de água."),
     Ensaio("Raízes do Córrego",1,(2600,CHAO),("meio","dreno","lingueta","ponte","ralo"),
            "S + Espaço na grade desce sem trocar de mapa. Explore até a membrana de libélula e suba pelos galhos a leste."),
+    Ensaio("Patrulha em dupla",0,(1510,CHAO),(),
+           "Morcego e aranha usam vinte sequências por espécie. Q/F usa ferramentas; o pólen retarda asas e o tanino rompe carapaça."),
     Ensaio("Duelo da aranha",0,ABRIGO,(),
-           "Pule a pedra e enfrente a aranha no chão ou sobre o galho. E recupera luz no abrigo a oeste."),
+           "Referência S02 de fio e salto, com replay. Os vinte combos novos estão em Patrulha em dupla e na História. E recupera luz no abrigo."),
 )
 INDICE_ARANHA = len(ENSAIOS) - 1
 
@@ -52,6 +54,10 @@ def preparar_ensaio(indice, dificuldade, semente=SEMENTE_ARANHA):
     jogo.entrar(cena.etapa)
     jogo.checkpoint=cena.pos
     jogo.reiniciar()
+    if cena.nome=="Patrulha em dupla":
+        jogo.ensaio_tatico=True
+        jogo.bolsa.receber("polen",2)
+        jogo.bolsa.receber("tanino",2)
     jogo.lume.iframes=0.
     jogo.notificar(cena.pista,8)
     return jogo

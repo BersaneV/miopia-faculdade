@@ -5,10 +5,10 @@ câmera. A leitura não altera flags, diário, inimigos ou geração aleatória.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 
-from .fases import ARENA, CHAO, RAIZ, SAIDA, VIGIA_X
+from .fases import ARENA, CHAO, RAIZ, SAIDA, VIGIA_X, FASES
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,25 @@ class Objetivo:
     local: str
     opcional: bool = False
     detalhe: str = ""
+    motivo: str = ""
+
+
+OBJETIVO_PRINCIPAL = "Leve orvalho às quatro raízes para reabrir o caminho dos sobreviventes."
+MOTIVOS = {
+    "valvula": "A corda dá acesso à peça que abre o caminho dos ninhos.",
+    "peca": "A peça destrava o caminho usado para retirar os casulos.",
+    "cunha": "Soltar a cunha reabre a passagem do berçário até a guardiã.",
+    "dreno": "Baixar a água permite recuperar a peça da ponte sob a raiz.",
+    "lingueta": "A ponte precisa desta peça para Fio levar os casulos pela margem.",
+    "ponte": "A ponte reconecta a margem de Fio ao canal dos casulos.",
+    "ralo": "Abrir o ralo devolve a água à borda e libera o caminho à guardiã.",
+    "no": "A luz de Eco revela uma travessia para quem ficou isolado.",
+    "brasa": "A brasa mantém a trilha acesa até a outra margem.",
+    "vagem": "O cheiro da vagem permite reencontrar quem chama do outro lado.",
+    "roldana": "A corda conduz ao contrapeso que sustenta a ponte do sino.",
+    "contrapeso": "A ponte leva ao sino capaz de chamar a guardiã.",
+    "eco_antigo": "O sino soterrado abre o caminho até a Coruja.",
+}
 
 
 # Nome breve para o mapa, ação para o HUD, instrução completa para diálogo.
@@ -70,13 +89,14 @@ def _alvo(j, ident, nome, acao, x, y, detalhe="", *, opcional=False):
     regiao = "corte" if j.em_vertical else "superficie"
     local = "Corte da Figueira" if j.em_vertical else j.fase.name
     return Objetivo(ident, nome, f"{acao} · {direcao(j, x, y)}", x, y,
-                    regiao, local, opcional, detalhe or acao + ".")
+                    regiao, local, opcional, detalhe or acao + ".",
+                    "Desvio opcional: encontre recursos para a travessia." if opcional else OBJETIVO_PRINCIPAL)
 
 
 def _mecanismo(j, ident):
     objeto = next(o for o in j.fase.objetos if o.id == ident)
     nome, acao, detalhe = PISTAS[ident]
-    return _alvo(j, ident, nome, acao, objeto.x, objeto.y, detalhe)
+    return replace(_alvo(j, ident, nome, acao, objeto.x, objeto.y, detalhe), motivo=MOTIVOS[ident])
 
 
 def _superficie(j):
@@ -169,23 +189,33 @@ def _subsolo(j):
 def objetivo_atual(j):
     if hasattr(j, "sala_id"):
         return None
+    if getattr(j,"ensaio_tatico",False):
+        e=next((e for e in j.inimigos if e.ativo and e.origem[0] in (1548,1660)),None)
+        return _alvo(j,"patrulha","Patrulha da margem","Afaste a patrulha",e.rect.centerx if e else 1510,
+                     CHAO,"Use os avisos para escolher entre recuar, saltar, cortar e espalhar pólen. Seu save da História está separado.",opcional=True)
     from . import subsolo
     if (subsolo.ativo(j) and 2440 <= j.lume.rect.centerx <= 3190
             and j.lume.rect.bottom > CHAO + 50):
         return _subsolo(j)
-    if not j.em_vertical and getattr(j,"missao","principal")=="secundaria":
-        from .narrativa import PEDIDOS
-        if "pedido_aceito" in j.flags and "pedido_entregue" not in j.flags:
-            pedido=PEDIDOS[j.etapa]
-            for flag,pista in pedido.passos:
-                if flag not in j.flags:
-                    ident="no" if flag=="chamado_eco" else flag
-                    o=next((o for o in j.objetos if o.id==ident),None)
-                    if o:
-                        return _alvo(j,o.id,pedido.titulo,pista,o.x,o.y,pista,opcional=True)
-            o=next((o for o in j.objetos if o.tipo=="npc" and o.nome==pedido.destino),None)
+    if not j.em_vertical:
+        from .missoes import rastreada
+        missao=rastreada(j)
+        if missao.id!="principal":
+            if missao.etapa!=j.etapa:
+                if missao.etapa>j.etapa and "raiz" not in j.flags:
+                    alvo=_superficie(j)
+                    return replace(alvo,motivo="Antes do pedido na próxima região, restaure esta raiz.")
+                x=34 if missao.etapa<j.etapa else SAIDA
+                return _alvo(j,"rota_pedido",missao.titulo,"Volte ao pedido em "+FASES[missao.etapa].name,
+                             x,CHAO,missao.passo,opcional=True)
+            o=next((o for o in j.objetos if o.id==missao.alvo_id or
+                    missao.alvo_id=="npc:"+o.nome),None)
             if o:
-                return _alvo(j,o.id,pedido.destino,pedido.entregar,o.x,o.y,pedido.entregar,opcional=True)
+                if o.id in PISTAS:
+                    alvo=_mecanismo(j,o.id)
+                    return replace(alvo,nome=missao.titulo,opcional=True,motivo="Pedido de "+missao.origem+" · "+missao.recompensa)
+                return replace(_alvo(j,o.id,missao.titulo,missao.passo,o.x,o.y,missao.passo,opcional=True),
+                               motivo="Pedido de "+missao.origem+" · "+missao.recompensa)
     return _corte(j) if j.em_vertical else _superficie(j)
 
 

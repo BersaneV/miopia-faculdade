@@ -91,13 +91,19 @@ def opcoes_ajustes(a,s):
             "Brilho da mata  ·  "+("Mínimo","Noturno","Médio","Alto")[p["brilho"]],
             "Som  ·  "+("silenciado" if p["mudo"] else "ligado"),"Voltar"]
     opcoes(a,s,labels,77,134,390,41,19)
-    from .paisagem import SOMBRAS, mascara_luz
-    # A amostra mostra exatamente a máscara aplicada na partida.
+    from .paisagem import mascara_luz
+    # Demonstra foco e fundo escuro, sem a antiga amostra de breu absoluto.
     amostra = imagem("fundo_0.jpg",340,188).copy()
+    borrado=pygame.transform.smoothscale(pygame.transform.smoothscale(amostra,(17,10)),(340,188))
+    borrado.fill(((65,78,93),(78,92,108),(97,111,125),(120,135,150))[p["brilho"]],special_flags=pygame.BLEND_RGB_MULT)
     mascara = pygame.Surface(amostra.get_size())
-    mascara.fill(SOMBRAS[p["brilho"]])
+    mascara.fill((0,0,0))
     mascara.blit(mascara_luz(66,p["brilho"]),(104,30),special_flags=pygame.BLEND_RGB_MAX)
+    inversa=pygame.Surface(amostra.get_size());inversa.fill((255,255,255))
+    inversa.blit(mascara,(0,0),special_flags=pygame.BLEND_RGB_SUB)
+    borrado.blit(inversa,(0,0),special_flags=pygame.BLEND_RGB_MULT)
     amostra.blit(mascara,(0,0),special_flags=pygame.BLEND_RGB_MULT)
+    amostra.blit(borrado,(0,0),special_flags=pygame.BLEND_RGB_ADD)
     s.blit(amostra,(517,146))
     texto(s,"Visibilidade na mata",517,344,15,PALIDO)
     texto(s,"Esquerda / direita  ajustar     Enter ou clique  avançar",82,410,16,PALIDO)
@@ -215,36 +221,28 @@ def diario(a,s):
         from .cartografia import alvo_local, mapa_local, texto_curto
         texto(s,"Corte da Figueira" if j.em_vertical else j.fase.name,85,135,23,AMBAR,"titulo")
         texto(s,"Âmbar · Lume     Alvo verde · próximo passo     Círculo · marco",85,168,14,PALIDO)
-        texto(s,"R  história / pedido do morador · Seleção: "+j.missao,85,183,11,AMBAR)
+        from .missoes import rastreada
+        texto(s,texto_curto("Acompanhando: "+rastreada(j).titulo+" · Direita: lista de pedidos",780,11),85,183,11,AMBAR)
         mapa_local(s,j,(85,197,780,153))
         alvo=alvo_local(j)
         texto(s,texto_curto(j.objetivo,780,17,"forte"),85,362,17,OSSO,"forte")
         if alvo:
+            texto(s,texto_curto(alvo.motivo,780,14),85,384,14,AMBAR)
             # O relato completo fica no diário; a faixa ao vivo mantém uma ação.
-            for n,linha in enumerate(linhas(alvo.detalhe,780,15)[:2]):
-                texto(s,linha,85,390+n*19,15,PALIDO)
+            for n,linha in enumerate(linhas(alvo.detalhe,780,14)[:2]):
+                texto(s,linha,85,404+n*17,14,PALIDO)
         reliquias=getattr(j.bolsa,"reliquias",())
         if reliquias:
             bonus=[]
             if j.bolsa.bonus_dano>1: bonus.append(f"dano +{round((j.bolsa.bonus_dano-1)*100)}%")
             if j.bolsa.bonus_velocidade>1: bonus.append(f"movimento +{round((j.bolsa.bonus_velocidade-1)*100)}%")
             if j.bolsa.fator_dreno<1: bonus.append(f"gasto de luz −{round((1-j.bolsa.fator_dreno)*100)}%")
-            texto(s,texto_curto("Relíquias ativas · "+" · ".join(bonus),780,13),85,436,13,AMBAR)
+            texto(s,texto_curto("Relíquias ativas · "+" · ".join(bonus),780,12),85,442,12,AMBAR)
         else:
-            texto(s,"Explore para localizar o alvo. K recupera a nitidez da floresta.",85,436,13,TEAL)
+            texto(s,"Explore para localizar o alvo. K recupera a nitidez da floresta.",85,442,12,TEAL)
     
     elif a.pagina==1:
-        texto(s,"As quatro raízes da figueira",85,143,23,AMBAR,"titulo")
-        texto(s,"Reacenda as raízes para levar orvalho de volta às margens.",85,177,17,PALIDO)
-        for n,nome in enumerate(("Bosque","Córrego","Taquaral","Gruta")):
-            x=173+n*200
-            if n<3: pygame.draw.line(s,TEAL,(x+8,260),(x+192,260),1)
-            feito="raiz" in j.historico.get((j.volta,n),())
-            losango(s,x,260,10,AMBAR if n==j.etapa or feito else TEAL,feito)
-            if n==j.etapa: pygame.draw.circle(s,OSSO,(x,260),18,1)
-            texto(s,nome if (j.volta,n) in j.historico else "···",x,295,19,OSSO,"titulo","centerx")
-        texto(s,"Pedidos dos moradores",85,350,16,AMBAR,"forte")
-        paragrafo(s,j.pedido_local or "Converse com os moradores para descobrir pedidos e recompensas.",85,379,765,16,PALIDO)
+        painel_pedidos(a,s)
     elif a.pagina==2 and tem_corte:
         from .corte_vertical import desenhar_mapa
         texto(s,"Corte da Figueira",85,130,25,AMBAR,"titulo")
@@ -254,6 +252,33 @@ def diario(a,s):
         texto(s,nome,84,161,30,AMBAR,"titulo")
         paragrafo(s,msg,84,221,750,22)
     texto(s,"Esquerda / direita   mudar página     Tab / Esc   fechar",84,465,15,PALIDO)
+
+
+def painel_pedidos(a,s):
+    from .missoes import conhecidas, rastreada
+    from .cartografia import texto_curto
+    from .fases import FASES
+    lista=conhecidas(a.jogo)
+    cursor=a.pedido_cursor%len(lista)
+    ativo=rastreada(a.jogo).id
+    texto(s,"Missões e pedidos",85,137,24,AMBAR,"titulo")
+    texto(s,"Só aparecem pedidos que você conheceu.",85,169,13,PALIDO)
+    for n,m in enumerate(lista):
+        y=197+n*36
+        if n==cursor:painel(s,(82,y-3,335,33),False)
+        losango(s,95,y+10,3,AMBAR,m.id==ativo)
+        texto(s,texto_curto(m.titulo,302,15,"forte"),107,y-2,15,OSSO,"forte")
+        texto(s,m.estado,107,y+15,11,PALIDO)
+    texto(s,"Cima / baixo: escolher   R / Enter: acompanhar",85,428,11,AMBAR)
+    m=lista[cursor];x=449
+    for n,l in enumerate(linhas(m.titulo,412,21,"titulo")[:2]):
+        texto(s,l,x,145+n*25,21,AMBAR,"titulo")
+    texto(s,"De "+m.origem+" para "+m.destino,x,207,13,OSSO,"forte")
+    texto(s,FASES[m.etapa].name+" · "+m.estado,x,229,13,PALIDO)
+    texto(s,"Próximo passo",x,261,14,AMBAR,"forte")
+    for n,l in enumerate(linhas(m.passo,412,16)[:4]):texto(s,l,x,285+n*20,16,OSSO)
+    texto(s,"Recebido" if m.estado=="Concluída" else "Recompensa",x,378,14,AMBAR,"forte")
+    for n,l in enumerate(linhas(m.recompensa,412,14)[:3]):texto(s,l,x,402+n*17,14,PALIDO)
 
 
 def registro(a,s):

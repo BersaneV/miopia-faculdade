@@ -50,18 +50,44 @@ def margens(i):
     return surf
 
 
+@lru_cache(maxsize=1)
+def raizes_subsolo():
+    # Uma camada larga é recortada pela câmera; não redesenha centenas de
+    # segmentos nem aloca uma superfície de fundo a cada quadro.
+    sub=pygame.Surface((1280,540));sub.fill((23,29,24))
+    for n in range(15):
+        x=n*97-30
+        pts=[(x+round(math.sin(y*.009+n)*25),y) for y in range(-40,580,12)]
+        pygame.draw.lines(sub,(41+n%3*5,41+n%3*4,30),False,pts,13+n%4*5)
+        pygame.draw.lines(sub,(60,57,37),False,[(x-4,y) for x,y in pts],1)
+    return sub
+
+
 # Fora dos halos a mata perde também o chão, o fundo e as estruturas. Os dois
 # níveis mais claros são ajustes de acessibilidade, não luz de cenário gratuita.
 SOMBRAS = ((0, 1, 2), (3, 5, 8), (18, 25, 33), (61, 70, 82))
 
 
-def aplicar_nevoa(camada, luz, cy=0):
-    """Preserva as cores da floresta; a luz recupera definição, sem fundo preto."""
+@lru_cache(maxsize=1)
+def buffers_nevoa():
+    return tuple(pygame.Surface(t) for t in ((960,540),(960,540),(960,540),(48,27),(960,540)))
+
+
+def capturar_fundo(camada,cy=0):
+    fundo=buffers_nevoa()[4]
+    fundo.blit(camada,(0,0),pygame.Rect(0,cy,960,540))
+    return fundo
+
+
+def aplicar_nevoa(camada, luz, cy=0, fundo=None, nivel=1):
+    """Fora da luz só existe o fundo distante. Não vaza a silhueta do terreno."""
     area=pygame.Rect(0,cy,960,540)
-    nitido=camada.subsurface(area).copy()
-    borrado=pygame.transform.smoothscale(pygame.transform.smoothscale(nitido,(48,27)),(960,540))
-    borrado.fill((125,140,155),special_flags=pygame.BLEND_RGB_MULT)
-    inversa=pygame.Surface((960,540));inversa.fill((255,255,255))
+    nitido,borrado,inversa,pequeno,_=buffers_nevoa()
+    nitido.blit(camada,(0,0),area)
+    pygame.transform.smoothscale(nitido if fundo is None else fundo,(48,27),pequeno)
+    pygame.transform.smoothscale(pequeno,(960,540),borrado)
+    borrado.fill(((65,78,93),(78,92,108),(97,111,125),(120,135,150))[nivel],special_flags=pygame.BLEND_RGB_MULT)
+    inversa.fill((255,255,255))
     inversa.blit(luz,(0,0),special_flags=pygame.BLEND_RGB_SUB)
     borrado.blit(inversa,(0,0),special_flags=pygame.BLEND_RGB_MULT)
     nitido.blit(luz,(0,0),special_flags=pygame.BLEND_RGB_MULT)
@@ -72,7 +98,7 @@ def aplicar_nevoa(camada, luz, cy=0):
 @lru_cache(maxsize=16)
 def mascara_luz(raio, brilho_mata):
     r = max(4, raio)
-    tom = SOMBRAS[brilho_mata]
+    tom = (0,0,0)
     surf = pygame.Surface((r*2, r*2))
     surf.fill(tom)
     for n in range(r, 0, -8 if r>=900 else -2):
@@ -83,6 +109,38 @@ def mascara_luz(raio, brilho_mata):
         if v>=1:
             break
     return surf
+
+
+@lru_cache(maxsize=1)
+def buffer_luz():
+    return pygame.Surface((960,540))
+
+
+def compor_luz(luz,j,cx,cy,brilho_mata):
+    from .visao import fontes
+    luz.fill((0,0,0))
+    aux=buffer_luz()
+    terrenos=j.solidos
+    for x,y,raio in fontes(j):
+        r=round(raio/8)*8
+        if r<8 or x+r<cx or x-r>cx+960 or y+r<cy or y-r>cy+540:continue
+        aux.fill((0,0,0))
+        aux.blit(mascara_luz(r,brilho_mata),(round(x-cx)-r,round(y-cy)-r))
+        for t in terrenos:
+            rect=t.rect
+            if not rect.colliderect(pygame.Rect(x-r,y-r,r*2,r*2)):continue
+            bordas=[]
+            if x<rect.left:bordas.append((rect.topright,rect.bottomright))
+            elif x>rect.right:bordas.append((rect.topleft,rect.bottomleft))
+            if y<rect.top:bordas.append((rect.bottomleft,rect.bottomright))
+            elif y>rect.bottom:bordas.append((rect.topleft,rect.topright))
+            for a,b in bordas:
+                def longe(p):
+                    dx,dy=p[0]-x,p[1]-y
+                    k=2200/max(1.,math.hypot(dx,dy))
+                    return (p[0]+dx*k-cx,p[1]+dy*k-cy)
+                pygame.draw.polygon(aux,(0,0,0),[(a[0]-cx,a[1]-cy),(b[0]-cx,b[1]-cy),longe(b),longe(a)])
+        luz.blit(aux,(0,0),special_flags=pygame.BLEND_RGB_MAX)
 
 
 @lru_cache(maxsize=80)
@@ -265,13 +323,43 @@ def passagem(s,x,y,subterranea=True):
     pygame.draw.lines(s,AMBAR,False,[(x-4,y-40),(x,y-40+d*4),(x+4,y-40)],1)
 
 
+def icone_item(s,item,x,y,w=24,h=24):
+    if item not in ("tanino","polen"):
+        sprite(s,"item_"+item,x,y,w,h)
+        return
+    rect=pygame.Rect(round(x-w*.35),round(y-h*.85),round(w*.7),round(h*.8))
+    cor=(158,105,48) if item=="tanino" else (184,170,82)
+    pygame.draw.ellipse(s,cor,rect)
+    pygame.draw.line(s,OSSO,(rect.centerx-3,rect.top),(rect.centerx+3,rect.top),3)
+    if item=="polen":
+        for dx,dy in ((-3,0),(3,3),(0,-4)):
+            pygame.draw.circle(s,AMBAR,(rect.centerx+dx,rect.centery+dy),2)
+    else:
+        pygame.draw.lines(s,AMBAR,False,[(rect.centerx-3,rect.top+5),(rect.centerx+3,rect.centery),(rect.centerx-2,rect.bottom-2)],2)
+
+
 def objeto(s,o,j,cx,tempo):
     x=o.x-cx
     if not -105<x<1065: return
+    if o.tipo=="encomenda":
+        y=o.y
+        pygame.draw.polygon(s,(94,119,67),[(x-16,y-2),(x-18,y-21),(x,y-29),(x+18,y-21),(x+14,y-2)])
+        pygame.draw.line(s,(206,184,119),(x-17,y-18),(x+16,y-8),2)
+        pygame.draw.line(s,(206,184,119),(x+16,y-22),(x-14,y-6),2)
+        brilho(s,(x,y-12),13)
+        return
     if o.tipo=="fenda":
         passagem(s,x,o.y)
         if abs(o.x-j.lume.rect.centerx)<140:
             texto(s,"Desvio da figueira",x,o.y-99,13,PALIDO,"forte","centerx")
+        return
+    if o.tipo=="pista":
+        y=o.y
+        pygame.draw.line(s,(96,76,49),(x,y),(x,y-44),4)
+        pygame.draw.polygon(s,(72,62,42),[(x-24,y-56),(x+24,y-54),(x+21,y-31),(x-23,y-33)])
+        pygame.draw.circle(s,(177,154,104),(round(x-10),y-44),7,2)
+        pygame.draw.lines(s,AMBAR,False,[(x+1,y-48),(x+8,y-48),(x+8,y-40),(x+13,y-40),(x+13,y-45)],2)
+        pygame.draw.lines(s,PALIDO,False,[(x+17,y-38),(x+21,y-41),(x+17,y-44)],1)
         return
     if o.tipo=="reliquia":
         y=o.y-17+round(math.sin(tempo*2)*2)
@@ -363,6 +451,9 @@ def lume(s,l,cx,t):
 
 class Paisagem:
     def __init__(self):
+        # Decodificar os fundos no início evita o pico de leitura quando
+        # Lume já está se movendo e uma região aparece pela primeira vez.
+        for i in range(4):fundo(i)
         self.luz=pygame.Surface((960,540))
         self.brilho_mata=1
         self.particulas=[]
@@ -424,15 +515,10 @@ class Paisagem:
         s.blit(fundo(i),(-int(cx/max(1,j.fase.width-960)*310),cy-108))
         if cy>60:
             # As raízes cobrem progressivamente o céu ao descer, no mesmo mundo.
-            sub=pygame.Surface((960,540))
-            sub.fill((23,29,24))
-            for n in range(14):
-                x=(n*107-int(cx*.32))%1050-45
-                pts=[(x+round(math.sin(y*.009+n)*25),y) for y in range(-40,580,12)]
-                pygame.draw.lines(sub,(41+n%3*5,41+n%3*4,30),False,pts,13+n%4*5)
-                pygame.draw.lines(sub,(60,57,37),False,[(x-4,y) for x,y in pts],1)
-            sub.set_alpha(min(255,round((cy-60)*1.1)))
-            s.blit(sub,(0,cy))
+            sub=raizes_subsolo()
+            alfa=min(255,round((cy-60)*1.1))
+            sub.set_alpha(None if alfa==255 else alfa)
+            s.blit(sub,(0,cy),pygame.Rect(int(cx*.12)%320,0,960,540))
         for n in range(28):
             x=(n*97-cx*.31+math.sin(n+t*.31)*10)%980-10
             y=cy+70+(n*47+t*(2+n%3))%365
@@ -446,6 +532,14 @@ class Paisagem:
             for n in range(4):
                 y=nivel+n*10
                 pygame.draw.lines(s,(108,154,145),False,[(left+k,y+math.sin(k*.07+t*2)*2) for k in range(0,right-left+1,10)],1)
+        fundo_visao=capturar_fundo(s,cy)
+        if i==1 and not hasattr(j,"sala_id"):
+            # O sulco liga a peça desenhada no aviso à boca real do túnel.
+            for n in range(18):
+                px=807+n*10-cx;py=436+(n%3)-1
+                pygame.draw.line(s,(130,137,116),(px,py),(px+6,py-2),1)
+            for px in (829,844,1066):
+                pygame.draw.lines(s,(120,147,119),False,[(px-cx,440),(px+5-cx,436),(px+9-cx,438)],2)
         if hasattr(j,"sala_id"): sustentar_galho_do_duelo(s,j,cx)
         for tr in j.solidos: terreno(s,tr,cx,i)
         for o in j.objetos: objeto(s,o,j,cx,t)
@@ -459,16 +553,8 @@ class Paisagem:
         desloc=int(cx*1.16)%1200
         if cy<180:
             for x in (-desloc,1200-desloc): s.blit(margens(i),(x,414))
-        self.luz.fill(SOMBRAS[self.brilho_mata])
-        fontes = [(j.lume.rect.centerx,j.lume.rect.centery,j.raio)]
-        fontes.extend((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios)
-        for x,y,raio in fontes:
-            r=round(raio/4)*4
-            if r<4 or x+r<cx or x-r>cx+960:
-                continue
-            self.luz.blit(mascara_luz(r,self.brilho_mata),(round(x-cx)-r,round(y-cy)-r),
-                          special_flags=pygame.BLEND_RGB_MAX)
-        aplicar_nevoa(s,self.luz,cy)
+        compor_luz(self.luz,j,cx,cy,self.brilho_mata)
+        aplicar_nevoa(s,self.luz,cy,fundo_visao,self.brilho_mata)
         for v in j.vestigios:
             if v.raio(j.tempo)>16:
                 xy=(round(v.x-cx),round(v.y))
@@ -512,9 +598,11 @@ def hud(s,j):
         item=j.bolsa.item
         qtd="ferramenta" if item.permanente and j.bolsa.quantidade else str(j.bolsa.quantidade)
         painel(s,(19,86,213,32),False)
-        sprite(s,"item_"+item.id,38,115,24,24)
+        icone_item(s,item.id,38,115,24,24)
         texto(s,f"{item.nome}  ·  {qtd}",57,88,13,PALIDO,"forte")
         texto(s,"Q  trocar   F  usar",57,104,11,PALIDO)
+        if j.bolsa.tanino_ate>j.tempo:
+            texto(s,f"Tanino ativo · {math.ceil(j.bolsa.tanino_ate-j.tempo)} s",22,122,12,AMBAR,"forte")
 
     if j.boss and not j.boss.vencido:
         painel(s,(258,17,402,64))

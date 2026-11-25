@@ -10,7 +10,7 @@ ALIASES={"etapa":"abertura","selo":"seiva","chefe_exposto":"vulneravel","chefe_a
          "vulneravel":"vulneravel","exposto":"vulneravel","madeira":"impacto","barril":"valvula"}
 ALERTAS={"aviso":5,"dano":6,"acerto":7,"sino":8,"impacto":9,"vulneravel":8,
          "raiz":9,"porta":8,"seiva":8}
-PRESENCA = {"asa_perto", "patas_perto", "sopro_perto", "zurro_perto", "casco_perto"}
+PRESENCA = {"asa_perto", "patas_perto", "sopro_perto", "zurro_perto", "casco_perto", "silvo_perto"}
 INTERVALO_BATIMENTO = 6.
 
 

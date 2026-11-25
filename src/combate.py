@@ -99,11 +99,12 @@ class Especie:
 
 
 ESPECIES = {
-    "morcego": Especie(3, (41, 27), 228, .53, 385, "asa_perto"),
+    "morcego": Especie(5, (41, 27), 250, .53, 420, "asa_perto"),
     "aranha": Especie(6, (49, 27), 255, .60, 276, "patas_perto"),
     "sombra": Especie(4, (37, 35), 210, .72, 305, "sopro_perto"),
     "vespa": Especie(3, (41, 28), 287, .53, 370, "zurro_perto"),
     "carabideo": Especie(5, (58, 37), 251, .68, 370, "casco_perto"),
+    "cobra": Especie(6, (56,27),260,.58,340,"silvo_perto"),
 }
 AEREOS = ("morcego", "vespa")
 
@@ -133,7 +134,7 @@ class Projetil:
         # Fio e ferrão podem ser interceptados. A onda deve ser saltada.
         if clarao and self.pos.distance_to(lume.rect.center) < 214:
             return "corte"
-        if self.tipo in ("fio", "ferrao") and corte and corte.inflate(9, 9).clipline(origem, self.pos):
+        if self.tipo in ("fio", "ferrao", "veneno") and corte and corte.inflate(9, 9).clipline(origem, self.pos):
             return "corte"
         if segmento_bloqueado(origem, self.pos, terrenos):
             return "fim"
@@ -188,13 +189,14 @@ class Inimigo:
         self.pesos_decisao = {}
         self.destino_recuo = Vetor(self.rect.center)
         self.resistencia_leve = 0.
+        self.lentidao = 0.
         self.recuo_ferida = False
 
     def mover(self, dx, dy, terrenos):
         """O raio da busca é local; paredes e bordas limitam a perseguição terrestre."""
         novo = self.rect.copy()
         novo.x += dx
-        if not any(not t.atravessavel and t.rect.colliderect(novo) for t in terrenos):
+        if not any(not t.atravessavel and pygame.FRect(t.rect).colliderect(novo) for t in terrenos):
             if self.tipo in AEREOS or (self.tecnica == "salto" and self.estado == "investida") or not terrenos:
                 self.rect.x = novo.x
             else:
@@ -202,7 +204,7 @@ class Inimigo:
                 if any(t.rect.collidepoint(frente, self.origem[1] + 2) for t in terrenos):
                     self.rect.x = novo.x
         novo = self.rect.move(0, dy)
-        if not any(not t.atravessavel and t.rect.colliderect(novo) for t in terrenos):
+        if not any(not t.atravessavel and pygame.FRect(t.rect).colliderect(novo) for t in terrenos):
             self.rect.y = novo.y
 
     def seguir(self, destino, velocidade, dt, terrenos):
@@ -386,6 +388,9 @@ class Inimigo:
         """Entrega os avisos com posição no mundo e o eventual impacto no jogador."""
         sons = []
         dano = False
+        lenta=self.lentidao>0
+        self.lentidao=max(0.,self.lentidao-dt)
+        if lenta:dt*=.60
         self.relogio += dt
         self.t -= dt
         self.flash = max(0., self.flash - dt)
@@ -434,11 +439,15 @@ class Inimigo:
             self.ultimo_corte = arma.serie
         de_frente = (lume.rect.centerx-self.rect.centerx)*self.frente > 0
         blindado = (self.tipo == "carabideo" and self.estado in ("patrulha", "aviso", "investida")
-                    and de_frente and arma.tipo in ("corte1", "corte2") and not pulso)
+                    and de_frente and arma.tipo in ("corte1", "corte2") and not pulso and not getattr(lume,"tanino",False))
         self.flash = .20
         if blindado:
             return "bloqueio"
-        self.vida -= 2 if pulso else CORTES[arma.tipo].dano*getattr(lume, "bonus_dano", 1.)
+        fator=2.5 if self.tipo=="carabideo" and getattr(lume,"tanino",False) else 1.
+        if pulso and self.tipo=="carabideo":
+            return "bloqueio"
+        dano_luz={"morcego":3,"sombra":3,"aranha":2,"vespa":1,"cobra":1}
+        self.vida -= dano_luz[self.tipo] if pulso else CORTES[arma.tipo].dano*getattr(lume, "bonus_dano", 1.)*fator
         self.ativo = self.vida > 0
         if not self.ativo:
             self.projeteis.clear()

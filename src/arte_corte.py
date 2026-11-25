@@ -85,7 +85,7 @@ def desenhar_ponto(camada,o,j,cx):
 
 
 def desenhar(s,j,t,nivel_brilho):
-    from .paisagem import SOMBRAS, lume, mascara_luz, terreno, aplicar_nevoa
+    from .paisagem import lume, terreno, aplicar_nevoa, compor_luz, capturar_fundo
     bg, camada, luz=camadas()
     cx,cy=round(j.camera),round(j.camera_y)
     tela=pygame.Rect(0,cy,960,540)
@@ -93,6 +93,7 @@ def desenhar(s,j,t,nivel_brilho):
     recorte=pygame.Rect(round(cx*(bg.get_width()-960)/(corte.LARGURA-960)),
                          round(cy*(bg.get_height()-540)/(corte.ALTURA-540)),960,540)
     camada.blit(bg,(0,cy),recorte)
+    fundo_visao=capturar_fundo(camada,cy)
     camada.blit(suportes(),(0,cy),pygame.Rect(cx,cy,960,540))
     if cy+540>1060 and cy<1260:
         sprite(camada,"obj_refugio",118-cx,1173,77,63)
@@ -129,15 +130,8 @@ def desenhar(s,j,t,nivel_brilho):
     for e in j.inimigos:
         if j.visivel(e.rect.center,18) and cy-50<e.rect.centery<cy+590:
             inimigo(camada,e,cx,j.lume,t)
-    luz.fill(SOMBRAS[nivel_brilho])
-    fontes=[(*j.lume.rect.center,j.raio)]
-    fontes.extend((v.x,v.y,v.raio(t)) for v in j.vestigios)
-    for x,y,raio in fontes:
-        r=round(raio/4)*4
-        if r>=4 and x+r>=cx and x-r<=cx+960 and y+r>=cy and y-r<=cy+540:
-            luz.blit(mascara_luz(r,nivel_brilho),(round(x-cx-r),round(y-cy-r)),
-                     special_flags=pygame.BLEND_RGB_MAX)
-    aplicar_nevoa(camada,luz,cy)
+    compor_luz(luz,j,cx,cy,nivel_brilho)
+    aplicar_nevoa(camada,luz,cy,fundo_visao,nivel_brilho)
     for v in j.vestigios:
         if v.raio(t)>16:
             brilho(camada,(v.x-cx,v.y),20)

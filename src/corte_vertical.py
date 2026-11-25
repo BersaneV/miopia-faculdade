@@ -6,7 +6,7 @@ from functools import lru_cache
 
 import pygame
 
-from .combate import Inimigo
+from .taticas import Habitante as Inimigo
 from .fases import CHAO, Objeto, Terreno
 
 LARGURA = 2432

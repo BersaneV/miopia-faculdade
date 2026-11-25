@@ -14,8 +14,10 @@ class Item:
 
 ITENS = (
     Item("balsamo", "Bálsamo de Mimo", "Recupera 35 de luz. Guarde para depois de um golpe ou clarão."),
-    Item("pavio", "Pavio de pólen", "Amplia a visão por 12 s. Clarões lançados nesse tempo duram 11 s."),
+    Item("pavio", "Pavio de pólen", "Amplia a visão por 12 s. Clarões lançados nesse tempo duram 9 s."),
     Item("casulo", "Casulo de seda", "Absorve o próximo ataque de uma criatura."),
+    Item("tanino", "Tanino de casca", "Amolece carapaças por 18 s: cortes dão 2,5× dano em besouros e atravessam a guarda."),
+    Item("polen", "Pólen aderente", "Retarda asas por 6 s e desfaz projéteis à frente. Só gasta se atingir algo."),
     Item("concha", "Concha de escuta", "Localiza a criatura mais próxima. Aguarde cinco segundos entre escutas.", True),
     Item("espinho", "Espinho de acácia", "Relíquia ativa ao recolher. Cortes causam 25% mais dano a criaturas comuns.", True, True),
     Item("asa", "Membrana de libélula", "Relíquia ativa ao recolher. Lume anda e plana 12% mais rápido.", True, True),
@@ -31,6 +33,7 @@ class Bolsa:
         self.escudo = False
         self.luz_ate = 0.
         self.escuta_ate = 0.
+        self.tanino_ate = 0.
         self.revisao = 0
 
     @property
@@ -113,6 +116,22 @@ class Bolsa:
             self.escudo = True
             mensagem = "Casulo vestido · absorve o próximo ataque."
             som = "corda"
+        elif item == "tanino":
+            if self.tanino_ate>j.tempo:
+                j.notificar("O tanino ainda cobre a lâmina.")
+                return None
+            self.tanino_ate=j.tempo+18.
+            j.aplicar_reliquias()
+            mensagem="Tanino · 18 s de cortes que rompem carapaça."
+            som="seiva"
+        elif item == "polen":
+            from .ferramentas import espalhar_polen
+            afetados=espalhar_polen(j)
+            if not afetados:
+                j.notificar("Nenhuma asa ou projétil ao alcance à frente. O pólen foi guardado.")
+                return None
+            mensagem=f"Pólen · {afetados} alvo(s) atingido(s); asas lentas por 6 s."
+            som="abertura"
         else:
             if self.escuta_ate > j.tempo:
                 j.notificar("O eco anterior ainda vibra na concha.")
@@ -149,6 +168,7 @@ class Bolsa:
             "escudo": self.escudo,
             "pavio_restante": max(0., self.luz_ate - tempo),
             "concha_restante": max(0., self.escuta_ate - tempo),
+            "tanino_restante": max(0., self.tanino_ate - tempo),
         }
 
     @classmethod
@@ -169,6 +189,7 @@ class Bolsa:
         for campo, atributo, limite in (
             ("pavio_restante", "luz_ate", 12.),
             ("concha_restante", "escuta_ate", 5.),
+            ("tanino_restante", "tanino_ate", 18.),
         ):
             valor = dados.get(campo, 0.)
             if isinstance(valor, (int, float)) and math.isfinite(valor):
@@ -259,7 +280,20 @@ def ajuda_do_refugio(j, nome, texto):
     if nome == "Mimo" and "mantimento_mimo" not in j.flags:
         j.flags.add("mantimento_mimo")
         _presentes(j, (("balsamo", 1),))
-        return "Este bálsamo é dos casulos vazios. Use F quando sua luz baixar. As crianças do berçário dormem aqui. Pergunte a Nira quem as trouxe."
+        j.flags.add("encomenda_aceita")
+        if "encomenda_recolhida" not in j.flags:
+            return "Tome este bálsamo. Minha mochila caiu na varanda acima de Nira: salte duas vezes pelos galhos. Traga o pacote com E e preparo três porções de tanino para romper carapaças."
+    if nome=="Mimo" and j.etapa==0:
+        j.flags.add("encomenda_aceita")
+        if "encomenda_entregue" in j.flags:
+            return "A mochila voltou inteira. Os casulos já têm abrigo. O tanino que preparei amolece a guarda dos besouros; use F antes de atacar."
+        if "encomenda_recolhida" in j.flags:
+            j.flags.add("encomenda_entregue")
+            j.bolsa.receber("tanino",3)
+            j.eventos.append("coleta")
+            j.memorizar("A mochila dos casulos · entregue","Mimo recebeu o pacote. Recompensa: 3 × Tanino de casca. F cobre a lâmina por 18 s; seus cortes atravessam a guarda dos besouros.")
+            return "Minha mochila! Vou preparar o tanino. Leve três porções: Q escolhe e F cobre a lâmina. Por dezoito segundos, os cortes rompem a guarda e ferem mais os besouros."
+        return "Falta minha mochila na varanda acima de Nira. Solte e aperte Espaço outra vez no ar. Use E no pacote e volte aqui. Preparo três porções de tanino em troca."
     if nome == "Brasa":
         if j.etapa == 3 and "pedido_entregue" in j.historico.get((j.volta, 1), set()) and "oferta_brasa" not in j.flags:
             j.flags.add("oferta_brasa")
