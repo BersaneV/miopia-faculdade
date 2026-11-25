@@ -180,6 +180,16 @@ def confirmar(a,s):
 def dialogo(a,s):
     j=a.jogo
     nome,msg=j.dialogo
+    if j.escolha_resgate is not None:
+        painel(s,(73,228,814,260))
+        texto(s,nome,97,240,25,AMBAR,'titulo')
+        paragrafo(s,a.fala_visivel,97,277,760,17,OSSO)
+        ultima=a.pagina_fala==len(a.fala_paginas)-1 and a.letras==len(a.fala)
+        if ultima:
+            opcoes(a,s,['Marcar a trilha com luz','Preparar um mantimento único'],90,386,770,35,16)
+            texto(s,'Cima / baixo escolher · Enter confirmar · Esc decidir depois',97,467,12,PALIDO)
+        else:texto(s,f'Enter avançar · {a.pagina_fala+1}/{len(a.fala_paginas)}',863,465,12,PALIDO,'normal','right')
+        return
     painel(s,(73,344,814,139))
     x=97
     if nome in NPC_TAM:
@@ -187,7 +197,7 @@ def dialogo(a,s):
         s.blit(img,(88,379)); x=179
     texto(s,nome,x,355,20,AMBAR,"titulo")
     paragrafo(s,a.fala_visivel,x,384,825-x,17,OSSO)
-    texto(s,"E / Enter   ·   avançar",866,456,12,PALIDO,"normal","right")
+    texto(s,f'E / Enter avançar · {a.pagina_fala+1}/{len(a.fala_paginas)}',866,456,12,PALIDO,"normal","right")
 
 
 def cena(a,s):
@@ -244,6 +254,7 @@ def diario(a,s):
             if j.bolsa.bonus_velocidade>1: bonus.append(f"movimento +{round((j.bolsa.bonus_velocidade-1)*100)}%")
             if j.bolsa.fator_dreno<1: bonus.append(f"gasto de luz −{round((1-j.bolsa.fator_dreno)*100)}%")
             if j.bolsa.estoque['frasco']:bonus.append('3 bálsamos na bolsa')
+            if j.bolsa.estoque['lente']:bonus.append('visão +18 px')
             texto(s,texto_curto("Relíquias ativas · "+" · ".join(bonus),780,12),85,442,12,AMBAR)
         else:
             texto(s,"Explore para localizar o alvo. K recupera a nitidez da floresta.",85,442,12,TEAL)
@@ -270,13 +281,15 @@ def painel_pedidos(a,s):
     ativo=rastreada(a.jogo).id
     texto(s,"Missões e pedidos",85,137,24,AMBAR,"titulo")
     texto(s,"Só aparecem pedidos que você conheceu.",85,169,13,PALIDO)
+    inicio=max(0,min(cursor-2,len(lista)-6))
     for n,m in enumerate(lista):
-        y=197+n*36
+        if not inicio<=n<inicio+6:continue
+        y=197+(n-inicio)*36
         if n==cursor:painel(s,(82,y-3,335,33),False)
         losango(s,95,y+10,3,AMBAR,m.id==ativo)
         texto(s,texto_curto(m.titulo,302,15,"forte"),107,y-2,15,OSSO,"forte")
         texto(s,m.estado,107,y+15,11,PALIDO)
-    texto(s,"Cima / baixo: escolher   R / Enter: acompanhar",85,428,11,AMBAR)
+    texto(s,f"{cursor+1}/{len(lista)} · Cima / baixo escolher · R acompanhar",85,428,11,AMBAR)
     m=lista[cursor];x=449
     for n,l in enumerate(linhas(m.titulo,412,21,"titulo")[:2]):
         texto(s,l,x,145+n*25,21,AMBAR,"titulo")
@@ -304,7 +317,7 @@ def registro(a,s):
         certo=m["correta"]==a.resposta
         texto(s,"A folha confirma sua leitura." if certo else "A folha guarda outra pista.",83,309,20,AMBAR,"titulo")
         paragrafo(s,m["explicacao"],83,346,755,17)
-    texto(s,"Enter   confirmar     Esc   seguir viagem",83,460,15,PALIDO)
+    texto(s,"Enter responder · ← / → outras raízes · Esc voltar à viagem",83,460,14,PALIDO)
 
 
 def capitulo(a,s):
@@ -329,6 +342,9 @@ def fim(a,s):
         return
     chave=j.estado if j.modo=="historia" else "infinito"
     titulo,msg=FINAL[chave]
+    if chave=='vitoria':
+        from .resgates import mensagem_final
+        titulo='A floresta responde';msg=mensagem_final(j)
     livro(a,s,titulo,"DESFECHO")
     y = paragrafo(s,msg,82,146,770,20)
     desdobramento = epilogo(j) if chave == "vitoria" else ""

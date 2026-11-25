@@ -16,7 +16,7 @@ from .memoria import pasta_dados
 from .travessia import Comando, NIVEIS
 
 ESQUEMA = 1
-SIMULACAO = "s06-aranha-1"
+SIMULACAO = "s07-aranha-1"
 MAX_PASSOS = 18_000
 MAX_ARQUIVOS = 32
 MAX_BYTES = 8 * 1024 * 1024
@@ -32,7 +32,7 @@ class HistoricoCheio(OSError):
 def assinatura():
     """A identidade das regras independe das opções de som e do desenho da sala."""
     digest = hashlib.sha256()
-    for nome in ("ensaios", "sala_aranha", "travessia", "combate", "fases", "visao", "narrativa", "subsolo", "descoberta", "missoes", "taticas", "ferramentas",'recursos','raizes_bosque'):
+    for nome in ("ensaios", "sala_aranha", "travessia", "combate", "fases", "visao", "narrativa", "subsolo", "descoberta", "missoes", "taticas", "ferramentas",'recursos','raizes_bosque','resgates','jardim','ultimo_chamado'):
         digest.update(nome.encode("ascii"))
         digest.update(Path(__file__).with_name(nome + ".py").read_bytes())
     return digest.hexdigest()

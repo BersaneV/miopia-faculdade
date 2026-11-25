@@ -12,7 +12,7 @@ from .fases import (ARENA, CHAO, FIM_ARENA, FALAS, FASES, MEIO, RAIZ, SAIDA,
                     RAMAIS, Objeto, Terreno, montar_infinito, terrenos)
 
 
-from . import narrativa, corte_vertical, subsolo, raizes_bosque, recursos
+from . import narrativa, corte_vertical, subsolo, raizes_bosque, recursos, resgates
 
 
 @dataclass(frozen=True)
@@ -249,6 +249,9 @@ class Jornada:
         self.marco_vertical = "bosque"
         self.destino_vertical = None
         self.motivo_morte = ""
+        self.sobreviventes = {}
+        self.concluida = False
+        self.escolha_resgate = None
         self.tempo = 0.
         self.tempo_restante = 120.
         self.pontuacao = 0
@@ -310,6 +313,7 @@ class Jornada:
             "tempo": self.tempo, "tempo_restante": self.tempo_restante,
             "pontuacao": self.pontuacao, "diario": list(self.diario),
             "bolsa": self.bolsa.salvar(self.tempo),
+            'sobreviventes':{k:dict(v) for k,v in self.sobreviventes.items()},'concluida':self.concluida,
             "fases": [{ "volta": volta, "etapa": etapa, "flags": sorted(flags)}
                       for (volta, etapa), flags in sorted(self.historico.items())],
         }
@@ -329,7 +333,7 @@ class Jornada:
             raise ValueError("Mapa descoberto inválido")
         jogo.explorado = set(memoria) if dados.get("mapa_grade")==24 else set()
         escolha=dados.get("missao")
-        jogo.missao = escolha if escolha in ("principal","secundaria","entrega_mimo",'pedido_raizes',*(f"pedido_{i}" for i in range(4))) else "principal"
+        jogo.missao = escolha if escolha in ("principal","secundaria","entrega_mimo",'pedido_raizes','resgates','jardim',*(f"pedido_{i}" for i in range(4))) else "principal"
         for visita in dados["fases"]:
             nivel = int(visita["etapa"])
             if not 0 <= nivel < len(FASES):
@@ -343,6 +347,10 @@ class Jornada:
                 marcos.update(("meio", FASES[nivel].preparo))
             jogo.historico[int(visita["volta"]), nivel] = marcos
         jogo.restauradas = sum("raiz" in flags for flags in jogo.historico.values())
+        jogo.sobreviventes=resgates.carregar(dados.get('sobreviventes'))
+        concluida=dados.get('concluida',jogo.restauradas>=4 and jogo.modo=='historia')
+        if type(concluida) is not bool:raise ValueError('Desfecho salvo inválido')
+        jogo.concluida=concluida
         jogo.diario = [(str(titulo), str(texto)) for titulo, texto in dados["diario"]]
         jogo.tempo = max(0., float(dados["tempo"]))
         jogo.bolsa = narrativa.Bolsa.carregar(dados.get("bolsa"), jogo.tempo)
@@ -386,6 +394,7 @@ class Jornada:
         portatil = 90 + .38 * max(0., min(100., self.lume.energia))
         if self.bolsa.luz_ate > self.tempo:
             portatil += 65
+        if self.bolsa.estoque['lente']:portatil+=18
         if self.boss and not self.boss.vencido:
             portatil += 22
         elif self.minichefe is not None:portatil+=14
@@ -415,7 +424,8 @@ class Jornada:
     @property
     def solidos(self):
         if self.em_vertical:
-            return corte_vertical.terrenos("viveiro_aberto" in self.cartografia)
+            from .jardim import FLAGS
+            return corte_vertical.terrenos("viveiro_aberto" in self.cartografia,frozenset(self.cartografia&FLAGS))
         geometria=frozenset(self.flags.intersection(("dreno","ponte","no","contrapeso",self.fase.preparo,"chefe",'porta_ninho','cipo_estendido')))
         ident=(self.etapa,geometria,subsolo.ativo(self),raizes_bosque.ativo(self))
         if getattr(self,"_geometria_id",None)!=ident:
@@ -470,6 +480,7 @@ class Jornada:
         if subsolo.ativo(self):
             out.extend(subsolo.objetos(self))
         if raizes_bosque.ativo(self):out.extend(raizes_bosque.objetos(self))
+        out.extend(resgates.objetos(self))
         return out
 
     def proximo(self):
@@ -478,7 +489,7 @@ class Jornada:
         p = self.lume.rect
         candidatos = []
         for o in self.objetos:
-            if o.tipo == "orvalho":
+            if o.tipo in ('orvalho','orvalho_jardim'):
                 continue
             dx = abs(o.x - p.centerx)
             if o.tipo == "corda" and dx < 50 and 216 <= p.bottom <= CHAO + 3:
@@ -623,6 +634,7 @@ class Jornada:
 
     def fechar_dialogo(self):
         self.dialogo = None
+        self.escolha_resgate=None
 
     def reiniciar(self):
         self.motivo_morte=""
@@ -632,6 +644,7 @@ class Jornada:
             self.estado = "jogando"
         self.boss = None
         self.dialogo = None
+        self.escolha_resgate=None
         for inimigo in self.inimigos:
             if inimigo.ativo:
                 inimigo.repor()
@@ -689,6 +702,9 @@ class Jornada:
         self.eventos.append("morte")
 
     def interagir(self, o):
+        if o.tipo=='sobrevivente':
+            resgates.conversar(self,o)
+            return
         if o.tipo=='raizes':
             raizes_bosque.interagir(self,o)
             return
@@ -796,8 +812,12 @@ class Jornada:
             if "raiz" not in self.flags:
                 self.notificar("A trilha se abre quando a raiz recebe o orvalho.")
             elif self.etapa == 3 and self.modo != "infinito":
-                self.estado = "vitoria"
-                self.eventos.append("vitoria")
+                if self.concluida:
+                    self.notificar('A floresta continua aberta. Volte pelos biomas e procure quem ficou para trás.',6.)
+                else:
+                    self.concluida=True
+                    self.estado = "vitoria"
+                    self.eventos.append("vitoria")
             else:
                 if self.etapa == 3:
                     self.volta += 1
@@ -915,7 +935,8 @@ class Jornada:
             self.eventos.append("coleta")
         if l.rect.left >= ARENA + 5 and self.fase.preparo in self.flags and "chefe" not in self.flags and self.boss is None:
             from .chefes import Encontro
-            self.boss = Encontro(self.etapa, ARENA, CHAO, FIM_ARENA - ARENA)
+            self.boss = Encontro(self.etapa, ARENA, CHAO, FIM_ARENA - ARENA,
+                                 despertar=self.modo=='historia',aliados=len(self.sobreviventes))
             self.eventos.append("arena")
         if l.arma.avancar(dt, l):
             self.eventos.append("golpe")
@@ -928,6 +949,9 @@ class Jornada:
                                        serie=l.arma.serie,bonus_dano=l.bonus_dano,
                                        dano_corte=2*l.arma.perfil.dano if l.arma.perfil else 2.)
             self.eventos.extend(e for e in eventos if e != "dano_jogador")
+            if 'gota_final' in eventos:
+                l.energia=max(l.energia,32.+5*self.boss.aliados)
+                self.notificar('Orvalho do ninho: um pulso guardado. K perto da marca devolve o sinal.',5.)
             if "dano_jogador" in eventos: self.ferir()
             if self.boss.vencido:
                 self.flags.add("chefe")
@@ -952,6 +976,8 @@ class Jornada:
         terrenos = self.solidos
         for e in self.inimigos:
             if not e.ativo:
+                continue
+            if getattr(e,'dormir_distante',False) and (abs(e.rect.centerx-lume.rect.centerx)>1000 or abs(e.rect.centery-lume.rect.centery)>760) and not e.projeteis:
                 continue
             golpe = lume.arma.area(lume)
             e.companhia=next((outro.rect.centerx for outro in self.inimigos if outro is not e

@@ -12,7 +12,7 @@ import pygame
 from src import telas, ambiental
 from src.audio import Audio
 from src.ensaios import ENSAIOS, INDICE_ARANHA, SEMENTE_ARANHA, preparar_ensaio
-from src.ilustracao import fonte, original, tinta
+from src.ilustracao import fonte, original, tinta, linhas
 from src.memoria import Memoria
 from src.paisagem import Paisagem, hud
 from src.replay_aranha import GravacaoAranha, HistoricoCheio, gravar_tentativa, iterar_reproducao, ler_tentativa
@@ -64,6 +64,8 @@ class App:
         self.pedido_cursor=0
         self.quadro=0
         self.fala=""
+        self.fala_paginas=['']
+        self.pagina_fala=0
         self.letras=0
         self.espera=0.
         self.passo_som=0.
@@ -121,6 +123,7 @@ class App:
         j=self.jogo
         if j.estado=="derrota":
             return [("Retomar do marco" if j.modo=="historia" else "Tentar outra noite"),"Voltar ao menu"]
+        if j.estado=='vitoria' and j.modo=='historia':return ['Explorar a floresta','Voltar ao menu']
         return ["Voltar ao menu"]
 
     def fechar_tentativa(self,motivo):
@@ -194,11 +197,12 @@ class App:
 
     def salvar_campanha(self,forcar=True):
         j=self.jogo
-        if self.ensaio is not None or not j or j.modo!="historia" or j.estado not in ("jogando","caido"): return
+        if self.ensaio is not None or not j or j.modo!="historia" or j.estado not in ("jogando","caido","vitoria"): return
         if not forcar and self.relogio<self.proximo_save:return
         self.proximo_save=self.relogio+.65
         assinatura=(j.etapa,j.pontuacao,j.lume.vidas,round(j.lume.energia),j.checkpoint,len(j.diario),
-                    tuple(sorted(j.flags)),j.bolsa.revisao,j.em_vertical,j.marco_vertical,frozenset(j.cartografia),frozenset(j.explorado),j.missao)
+                    tuple(sorted(j.flags)),j.bolsa.revisao,j.em_vertical,j.marco_vertical,frozenset(j.cartografia),frozenset(j.explorado),j.missao,
+                    j.concluida,tuple((k,v['oficio'],v['premio']) for k,v in sorted(j.sobreviventes.items())))
         if forcar or assinatura!=self.ultimo_save:
             self.mem_camp=j.salvar()
             self.mem.guardar("campanha",self.mem_camp)
@@ -217,6 +221,7 @@ class App:
                 return
         else:
             self.jogo=Jornada(modo,self.mem.prefs["dificuldade"])
+            if modo=='historia':self.jogo.flags.add('ouviu_resgates')
         self.ultimo_save=None
         self.salvar_campanha()
         if modo=="historia" and not continuar:
@@ -232,7 +237,16 @@ class App:
         self.musica(CORES_AUDIO[self.jogo.etapa])
 
     def nova_fala(self,msg):
-        self.fala=msg
+        self.pagina_fala=0
+        self.alvos=[];self.selecao=0
+        if self.estado=='prologo':self.fala_paginas=[msg]
+        else:
+            escolha=self.jogo and self.jogo.escolha_resgate is not None
+            x=179 if self.jogo and self.jogo.dialogo and self.jogo.dialogo[0] in telas.NPC_TAM else 97
+            partes=linhas(msg,760 if escolha else 825-x,17)
+            tamanho=4 if escolha else 3
+            self.fala_paginas=[' '.join(partes[i:i+tamanho]) for i in range(0,len(partes),tamanho)] or ['']
+        self.fala=self.fala_paginas[0]
         self.letras=0
         self.espera=.02
 
@@ -251,11 +265,22 @@ class App:
         if self.letras<len(self.fala):
             self.letras=len(self.fala)
             return
+        if self.pagina_fala<len(self.fala_paginas)-1:
+            self.pagina_fala+=1;self.fala=self.fala_paginas[self.pagina_fala]
+            self.letras=0;self.espera=.02
+            return
         if self.estado=="prologo":
             self.quadro+=1
             if self.quadro==len(PROLOGO): self.jogar()
             else: self.nova_fala(PROLOGO[self.quadro][1])
         else:
+            if self.jogo.escolha_resgate is not None:
+                from src.resgates import escolher
+                escolher(self.jogo,self.selecao)
+                self.som('resgate')
+                self.salvar_campanha()
+                self.alvos=[]
+                return
             self.jogo.fechar_dialogo()
             self.bordas.clear()
 
@@ -287,7 +312,9 @@ class App:
         estado=self.estado
         i=self.selecao
         self.som("clique")
-        if estado=="menu":
+        if estado=='jogo' and self.jogo.dialogo:
+            self.avancar_fala()
+        elif estado=="menu":
             nome=self.menu_nomes()[i]
             if nome=="Jogar história": self.iniciar("historia")
             elif nome=="Nova história":
@@ -347,6 +374,10 @@ class App:
             if self.ensaio==INDICE_ARANHA:
                 if i==0: self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
                 else: self.voltar_aos_ensaios()
+            elif i==0 and self.jogo.estado=='vitoria' and self.jogo.modo=='historia':
+                self.jogo.estado='jogando'
+                self.salvar_campanha();self.jogar()
+                self.jogo.notificar('A floresta continua aberta. M acompanha os resgates e pedidos que faltam.',7.)
             elif i==0 and self.jogo.estado=="derrota":
                 self.iniciar(self.jogo.modo,self.jogo.modo=="historia" and bool(self.mem_camp))
             else: self.menu()
@@ -370,6 +401,13 @@ class App:
         self.pedido_cursor=ids.index(rastreada(self.jogo).id)
         self.mudar("diario")
         self.som("pagina")
+
+    def abrir_caderno(self):
+        conhecidos=[i for i in range(4) if 'raiz' in self.jogo.historico.get((0,i),set())]
+        if not conhecidos:
+            self.jogo.notificar('O caderno ganha uma página quando você restaura uma raiz.');return
+        self.registro_etapa=self.jogo.etapa if self.jogo.etapa in conhecidos else conhecidos[-1]
+        self.resposta=None;self.mudar('registro')
 
     def evento(self,e):
         if e.type==pygame.QUIT:
@@ -421,9 +459,14 @@ class App:
             elif k in ACEITAR: self.avancar_fala()
         elif est=="jogo":
             if self.jogo.dialogo:
-                if k in (*ACEITAR,pygame.K_e,pygame.K_ESCAPE): self.avancar_fala()
+                if self.jogo.escolha_resgate is not None and k==pygame.K_ESCAPE:
+                    self.jogo.fechar_dialogo();self.alvos=[]
+                elif self.jogo.escolha_resgate is not None and k in (pygame.K_UP,pygame.K_DOWN):
+                    self.selecao=(self.selecao+1)%2
+                elif k in (*ACEITAR,pygame.K_e,pygame.K_ESCAPE): self.avancar_fala()
             elif k in (pygame.K_ESCAPE,pygame.K_p): self.mudar("pausa")
             elif k in (pygame.K_TAB,pygame.K_m): self.abrir_diario("jogo")
+            elif k==pygame.K_c and self.jogo.modo=='historia':self.abrir_caderno()
             elif k==pygame.K_v and getattr(self.jogo,'ensaio_armas',False):
                 if self.jogo.trocar_arma(): self.som('pagina')
             elif k==pygame.K_q:
@@ -456,6 +499,12 @@ class App:
                 self.pagina=(self.pagina+(-1 if k in (pygame.K_LEFT,pygame.K_a) else 1))%(len(self.jogo.diario)+2+bool(self.jogo.cartografia))
                 self.som("pagina")
         elif est=="pausa" and k in (pygame.K_ESCAPE,pygame.K_p): self.jogar()
+        elif est=='registro' and k in (pygame.K_LEFT,pygame.K_RIGHT):
+            conhecidos=[i for i in range(4) if 'raiz' in self.jogo.historico.get((0,i),set())]
+            if conhecidos:
+                atual=conhecidos.index(self.registro_etapa) if self.registro_etapa in conhecidos else 0
+                self.registro_etapa=conhecidos[(atual+(-1 if k==pygame.K_LEFT else 1))%len(conhecidos)]
+                self.resposta=None;self.selecao=0
         elif est=="pausa" and k==pygame.K_r: self.perguntar_reinicio()
         elif k==pygame.K_ESCAPE:
             if est in ("registro","capitulo"): self.jogar()
@@ -524,6 +573,7 @@ class App:
                 self.fechar_tentativa(j.estado)
                 if self.ensaio is None:
                     self.mem.terminar(j)
+                    self.salvar_campanha()
                 self.mudar("fim")
                 self.musica(j.estado)
             elif raizes<j.restauradas and j.modo=="historia":
@@ -531,7 +581,7 @@ class App:
                 m=ambiental.MENSAGENS[j.etapa]
                 j.memorizar(m["fase"],m["mensagem"])
                 self.resposta=None
-                self.mudar("registro")
+                j.notificar('Raiz restaurada. C abre o caderno opcional; a trilha continua à direita.',6.)
                 self.salvar_campanha()
             elif j.etapa!=etapa:
                 self.musica(CORES_AUDIO[j.etapa])
@@ -563,8 +613,10 @@ class App:
         ativo=(self.estado=="jogo" or self.estado=="replay" and self.reproducao is not None
                and not self.replay_pausado) and j and not j.dialogo
         if ativo:
-            self.musica(f"chefe_{j.boss.indice}" if j.boss and not j.boss.vencido else
-                        'chefe_2' if j.minichefe is not None else CORES_AUDIO[j.etapa])
+            self.musica(('chefe_final' if j.boss.coro_iniciado else f'chefe_{j.boss.indice}')
+                        if j.boss and not j.boss.vencido else 'chefe_2' if j.minichefe is not None else
+                        'jardim' if j.em_vertical and j.lume.rect.centerx>=2432 else
+                        'retorno' if j.concluida else CORES_AUDIO[j.etapa])
         self.audio.ambiente(combate=bool(ativo and j.combate),
                            energia=j.lume.energia if ativo else 100,
                            raizes=j.restauradas if j else 0,suspenso=not ativo)

@@ -74,8 +74,10 @@ class Encontro:
     """Um encontro novo restaura a geometria e todos os objetos essenciais."""
     meta = 2
 
-    def __init__(self, indice: int, inicio: int, chao: int, largura: int = 760):
+    def __init__(self, indice: int, inicio: int, chao: int, largura: int = 760, *, despertar=False, aliados=0):
         self.indice, self.inicio, self.chao, self.largura = indice, inicio, chao, largura
+        self.despertar=despertar and indice==3
+        self.aliados=max(0,min(3,aliados));self.coro_iniciado=False
         self.ficha = FICHAS[indice]
         self.nome = self.ficha.nome
         self.esq = inicio + 62
@@ -135,6 +137,8 @@ class Encontro:
     def dica(self):
         if self.vencido:
             return self.ficha.desfecho
+        if self.estado.startswith('coro_'):
+            return f'Último chamado: {self.coro_sinais}/3 sinais. K junto ao ninho marcado; E recolhe uma gota para esse sinal.'
         if self.estado == "aberto":
             return self.ficha.janela
         if self.indice == 0 and self.estado in ("aviso", "investida"):
@@ -168,6 +172,7 @@ class Encontro:
 
     @property
     def som_aviso(self):
+        if self.estado.startswith('coro_'):return 'coruja_eco'
         if self.indice == 2:
             return {'salto': 'casco_salto', 'varrida': 'casco_chifre'}.get(self.tecnica, 'casco_avanco')
         if self.indice == 3:
@@ -193,6 +198,9 @@ class Encontro:
         return abs(corpo.centerx-x) <= alcance and self.chao-86 <= corpo.bottom <= self.chao+24
 
     def interacao(self, corpo):
+        if self.estado.startswith('coro_'):
+            from .ultimo_chamado import perto
+            return 'Recolher orvalho do último ninho' if self.coro_gota and perto(self,corpo) else ''
         if self.vencido or self.estado in ("aberto","desce","flor","rastro","investida_seiva",'muda_casco','muda_coruja'):
             return ""
         if self.indice == 1 and self.agua <= 0 and self._perto(corpo, self.valvula):
@@ -279,9 +287,7 @@ class Encontro:
             self.onda = 1.
             eventos.append("acerto")
             if self.vida <= 0:
-                self.vencido = True
-                self.estado = "repouso"
-                eventos.append("chefe_resolvido")
+                self._resolver(eventos)
                 return
             self._fechar()
         elif self.tempo <= 0:
@@ -291,6 +297,14 @@ class Encontro:
         if not self.atingiu and area.colliderect(corpo):
             self.atingiu = True
             eventos.append("dano_jogador")
+
+    def _resolver(self,eventos):
+        if self.despertar and not self.coro_iniciado:
+            from .ultimo_chamado import iniciar
+            iniciar(self,eventos)
+            return
+        self.vencido=True;self.estado='repouso'
+        eventos.append('chefe_resolvido')
 
     def _aviso_investida(self, destino, y, duracao, impacta, eventos):
         self.destino = max(self.esq, min(self.dir, destino))
@@ -431,6 +445,11 @@ class Encontro:
         self.agua = max(0., self.agua-dt)
         if self.vencido:
             return eventos
+        if self.estado.startswith('coro_'):
+            from .ultimo_chamado import atualizar
+            self.tempo-=dt
+            atualizar(self,dt,corpo,clarao,interagir,eventos)
+            return eventos
         # A arena aceita um acerto por arco, mesmo quando a fraqueza não está
         # exposta. Um crítico mantém o valor dos mecanismos de cada guardião.
         novo = serie != self.ultimo_corte if serie is not None else self.relogio-self.ultimo_golpe_t>.3
@@ -450,8 +469,7 @@ class Encontro:
                 self.vida=max(0.,self.vida-dano)
                 eventos.append("acerto" if dano else "bloqueio")
                 if self.vida<=0:
-                    self.vencido=True;self.estado="repouso"
-                    eventos.append("chefe_resolvido")
+                    self._resolver(eventos)
                     return eventos
         # Casco e Coruja possuem tempos reais próprios, inclusive avisos.
         dt *= 1.35 if self.indice==0 else 1.2 if self.indice==1 else 1.

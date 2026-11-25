@@ -62,6 +62,23 @@ def conhecidas(j):
         out.append(Missao('pedido_raizes','A reserva do berçário','Mimo','Mimo',0,estado,passo,
                           'Ampola do berçário: capacidade de 3 bálsamos e uma carga.',alvo,
                           'O âmbar do viveiro permite vedar outra ampola de viagem.'))
+    if any('ouviu_resgates' in f for f in j.historico.values()) or j.sobreviventes:
+        from .resgates import PESSOAS
+        falta=next((p for p in PESSOAS if p.id not in j.sobreviventes),None)
+        pistas={'tila':'Procure Tila na câmara sob a galeria do Bosque. O Caruncho guarda a passagem.',
+                'bento':'Procure Bento nos galhos inferiores do Córrego, depois do ralo.',
+                'aru':'Procure Aru na oficina do Corte. Tila e Bento precisam voltar primeiro.'}
+        out.append(Missao('resgates','As três vozes da colônia','Mimo','Colônia',falta.etapa if falta else 0,
+                          'Em curso' if falta else 'Concluída',pistas[falta.id] if falta else 'Os três sobreviventes voltaram.',
+                          'Companheiros no abrigo: escolha luz na trilha ou um mantimento único.',
+                          'resgate_'+falta.id if falta else '', 'A colônia precisa de quem cuida, transporta água e planta.'))
+    if 'jardim_aberto' in j.cartografia:
+        from .jardim import objetivo
+        ident,passo=objetivo(j)
+        out.append(Missao('jardim','A primeira muda','Aru','Nascente do Jardim',0,
+                          'Concluída' if 'jardim_plantado' in j.cartografia else 'Em curso',passo,
+                          'Retorno ao viveiro e dois pavios; dois segredos na rota.',ident,
+                          'Água e sementes precisam chegar ao mesmo canteiro.'))
     return tuple(out)
 
 

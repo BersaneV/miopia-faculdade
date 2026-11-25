@@ -1,12 +1,12 @@
 PROLOGO = (
     ("Os quatro caminhos",
-     "Toda noite a colônia levava orvalho para a figueira. Lume contava quatro sulcos na casca. Ultimamente, só um deles chegava molhado.", 3),
+     "Tila cuidava dos casulos, Bento levava água e Aru guardava as sementes. Os três não voltaram. Na figueira, só um dos quatro canais ainda trazia orvalho.", 3),
     ("A noite do raio",
      "O raio abriu o tronco. O Breu seguiu as lanternas fortes até o centro. A de Lume mal iluminava as próprias asas. Foi assim que ele escapou.", 0),
     ("O último turno",
-     "O sino da guardiã bateu três vezes. Mimo chamou do abrigo: “Se encontrar um casulo inteiro, traga para mim. Os que eu recolhi estão frios.”", 0),
+     "Mimo encontrou a marca de Tila na grade do Bosque, os frascos de Bento no Córrego e uma folha de Aru na oficina. “Traga os três para casa. Eu preparo a volta.”", 0),
     ("O berçário vazio",
-     "O orvalho seca ao amanhecer. As asas rasgadas ainda seguram uma queda. Lume procura os pequenos e leva a primeira gota pelo sulco que secou.", 0),
+     "Lume precisa devolver água às quatro raízes para reabrir o caminho da colônia. O orvalho seca ao amanhecer. Os sinais dos sobreviventes levam aos desvios; a primeira roda está nos galhos junto de Nira.", 0),
 )
 ENTRADAS = (
     "As cascas dos casulos estão cortadas por dentro. Quem tirou os pequenos daqui conhecia a passagem. Nira ainda guarda o mapa.",
@@ -42,9 +42,9 @@ CONTROLES = (
     ("Shift + direção", "Deslizar. A corrente do córrego exige impulso."),
     ("E", "Conversar, operar mecanismos e abrir bolsas de trilha."),
     ("J / S+J / Shift+J", "Combo / golpe descendente / avanço com direção (8 luz)."),
-    ("K", "Clarão amplo por 6,5 s. Pavio prolonga; resina reduz o custo."),
+    ("K", "Clarão por 5,5 s. Pavio prolonga para 9 s; resina reduz o custo."),
     ("Q   /   F", "Escolher item na bolsa / usar o item escolhido."),
-    ("Tab", "Diário, mapa e pistas dos pedidos dos moradores."),
+    ("Tab / C", "Mapa e pedidos / caderno opcional das raízes já restauradas."),
     ("Esc   ou   P", "Pausar. Na pausa, R retorna ao marco."),
     ("M / F10 / F11", "Mapa / silenciar / alternar tela cheia."),
 )

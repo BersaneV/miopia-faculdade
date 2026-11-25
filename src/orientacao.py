@@ -189,6 +189,12 @@ def _subsolo(j):
 def objetivo_atual(j):
     if hasattr(j, "sala_id"):
         return None
+    from .resgates import orientar as orientar_resgates
+    resgate=orientar_resgates(j)
+    if resgate is not None:return resgate
+    from .jardim import orientar as orientar_jardim
+    jardim=orientar_jardim(j)
+    if jardim is not None:return jardim
     from .raizes_bosque import orientar
     raizes=orientar(j)
     if raizes is not None:return raizes

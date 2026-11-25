@@ -113,9 +113,7 @@ class Habitante(Inimigo):
         if self.tecnica=="fenda":self.alvo.y=self.origem[1]
         self.estado="aviso"
         self.t=max(.36,self.ficha.aviso/self.ritmo*.88)
-        if self.tipo=="cobra":return "silvo_ataque"
-        return {"fio":"fio_disparo","ferrao":"ferrao","eco":"pressagio","fenda":"pressagio",
-                "onda":"casco_avanco","rasteira":"rasgo","carga":"casco_avanco"}.get(self.tecnica,"rasgo")
+        return f'aviso_{self.tipo}_{passo}'
 
     def lancar(self):
         if self.tecnica=="eco":

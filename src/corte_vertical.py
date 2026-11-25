@@ -9,7 +9,7 @@ import pygame
 from .taticas import Habitante as Inimigo
 from .fases import CHAO, Objeto, Terreno
 
-LARGURA = 2432
+LARGURA = 4608
 ALTURA = 1908
 BOCA_LESTE = 1416
 NIVEIS = (
@@ -27,6 +27,7 @@ MARCOS = {
     "cisterna": (455, 1828),
     "corrego": (1225, 1828),
     "estaleiro": (1905, 790),
+    'jardim':(2510,790),
 }
 BOCAS = {"bosque": (0, 630), "copa": (0, 1320), "corrego": (1, 660), "estaleiro": (1, 1944)}
 SUP = {
@@ -38,6 +39,9 @@ SUP = {
 
 
 def setor(y,x=None):
+    if x is not None and x>=2432:
+        from .jardim import setor as setor_jardim
+        return setor_jardim(y,x)
     if x is not None and x >= BOCA_LESTE:
         return ("estaleiro", "Estaleiro das Folhas") if y < 1160 else ("viveiro", "Viveiro Afundado")
     if x is not None and ARQUIVO.collidepoint(x,y):
@@ -57,8 +61,8 @@ def entradas(j):
                  and (nome != "estaleiro" or "ponte" in j.flags))
 
 
-@lru_cache(maxsize=2)
-def terrenos(comporta_aberta=False):
+@lru_cache(maxsize=16)
+def terrenos(comporta_aberta=False,jardim_flags=frozenset()):
     partes = []
     def t(x,y,w,h,material):
         partes.append(Terreno(pygame.Rect(x,y,w,h), material))
@@ -123,7 +127,8 @@ def terrenos(comporta_aberta=False):
                   (1614,1744,228)):
         t(x,y,w,18,"plataforma")
     t(1388,1828,1038,80,"chao")
-    t(2394,0,38,1828,"parede")
+    from .jardim import terrenos as terrenos_jardim
+    partes.extend(terrenos_jardim(jardim_flags))
     return tuple(partes)
 
 
@@ -165,8 +170,10 @@ REGISTROS = {
 
 
 def objetos(j):
+    from .resgates import objetos as pessoas
+    from .jardim import objetos as pontos_jardim
     return tuple(o for o in PONTOS
-                 if not (o.tipo=="reliquia" and j.bolsa.estoque.get(o.id.removeprefix("reliquia_"))))
+                 if not (o.tipo=="reliquia" and j.bolsa.estoque.get(o.id.removeprefix("reliquia_"))))+pessoas(j)+pontos_jardim(j)
 
 
 def camera(j,dt=None):
@@ -195,6 +202,11 @@ def entrar(j,marco,pela_boca=False):
     j.inimigos=[Inimigo(tipo,x,y,dificuldade=j.dificuldade)
                 for tipo,x,y in (("morcego",731,293),("aranha",1146,1492),("sombra",797,1828))
                 if f"vigia_{x}" not in j.cartografia]
+    from .jardim import CRIATURAS
+    for tipo,x,y in CRIATURAS:
+        if f'vigia_{x}' in j.cartografia:continue
+        e=Inimigo(tipo,x,y,dificuldade=j.dificuldade);e.dormir_distante=True
+        j.inimigos.append(e)
     j.checkpoint=MARCOS[marco]
     chegada=(1220,316) if pela_boca and marco=="copa" else j.checkpoint
     j.recolocar(chegada)
@@ -210,6 +222,14 @@ def ralo_iluminado(j,o):
 
 
 def interagir(j,o):
+    if o.tipo=='jardim':
+        from .jardim import interagir as usar_jardim
+        usar_jardim(j,o)
+        return
+    if o.tipo=='sobrevivente':
+        from .resgates import conversar
+        conversar(j,o)
+        return
     ident=o.id
     if ident.startswith("corte_"):
         entrar(j, ident.removeprefix("corte_"),pela_boca=True)
@@ -321,7 +341,12 @@ def passo(j,dt,cmd,clarao):
         camera(j,dt)
         return
     estava_chao=l.chao
-    if l.movimento(dt,cmd,j.solidos,0,True):
+    if l.em_corda and l.corda_destino is not None:
+        l.rect.bottom=max(l.corda_destino,l.rect.bottom-265*dt)
+        l.vx=l.vy=0.;l.chao=False
+        if l.rect.bottom<=l.corda_destino:
+            l.em_corda=False;l.corda_destino=None;l.chao=True
+    elif l.movimento(dt,cmd,j.solidos,0,True):
         j.eventos.append("pulo")
     l.rect.left=max(0,min(l.rect.left,LARGURA-l.rect.width))
     if l.rect.top>ALTURA+28:
@@ -334,6 +359,8 @@ def passo(j,dt,cmd,clarao):
     if l.arma.avancar(dt,l):
         j.eventos.append("golpe")
     j.combater_inimigos(dt,l.arma.area(l),clarao)
+    from .jardim import atualizar
+    atualizar(j)
     if l.energia<=0:
         j.perder_fagulha()
     visitar(j)
@@ -346,5 +373,5 @@ def desenhar_vertical(s,j,t,brilho_mata):
 
 
 def desenhar_mapa(s,j,rect):
-    from .arte_corte import mapa
-    mapa(s,j,rect)
+    from .cartografia import mapa_local
+    mapa_local(s,j,rect)

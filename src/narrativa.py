@@ -23,6 +23,7 @@ ITENS = (
     Item("asa", "Membrana de libélula", "Relíquia ativa ao recolher. Lume anda e plana 12% mais rápido.", True, True),
     Item("resina", "Resina de âmbar", "Relíquia ativa ao recolher. Consumo passivo de luz −35%. Clarão custa 18 em vez de 22.", True, True),
     Item('frasco','Ampola do berçário','Mimo amplia a bolsa: capacidade de bálsamos passa de 2 para 3. Não cria cargas sozinha.',True,True),
+    Item('lente','Lente de casca','A luz portátil alcança 18 px a mais. Paredes e plataformas continuam ocultando o outro lado.',True,True),
 )
 POR_ID = {item.id: item for item in ITENS}
 
@@ -296,6 +297,7 @@ def _presentes(j, itens):
 
 def ajuda_do_refugio(j, nome, texto):
     if nome=='Mimo' and j.etapa==0:
+        j.flags.add('ouviu_resgates')
         from .raizes_bosque import fala_mimo
         pedido=fala_mimo(j)
         if pedido:return pedido
@@ -305,7 +307,7 @@ def ajuda_do_refugio(j, nome, texto):
         _presentes(j, (("balsamo", 1),))
         j.flags.add("encomenda_aceita")
         if "encomenda_recolhida" not in j.flags:
-            return "Tome este bálsamo. Minha mochila caiu na varanda acima de Nira: salte duas vezes pelos galhos. Traga o pacote com E e preparo três porções de tanino para romper carapaças."
+            return "Tome este bálsamo. Tila ficou sob a grade do Bosque; Bento sumiu nos galhos sob o Córrego. Aru levou as sementes para a oficina. O mapa pode acompanhar os sinais deles. Minha mochila caiu na varanda acima de Nira: traga o pacote e preparo tanino para as carapaças."
     if nome=="Mimo" and j.etapa==0:
         j.flags.add("encomenda_aceita")
         if "encomenda_entregue" in j.flags:

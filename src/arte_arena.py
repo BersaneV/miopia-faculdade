@@ -197,6 +197,17 @@ def _linha_de_aviso(surf, inicio, fim):
 
 def _mira(surf, e, cx, cy):
     x, y = e.x-cx, e.y-cy
+    if e.estado.startswith('coro_'):
+        from .ultimo_chamado import alvo
+        from .arte_resgates import vagalume
+        tx,ty=alvo(e);tx-=cx;ty-=cy
+        pygame.draw.circle(surf,OURO,(round(tx),round(ty)),23,2)
+        pygame.draw.lines(surf,OURO,False,[(tx-9,ty+6),(tx,ty-7),(tx+9,ty+6)],2)
+        for n in range(e.aliados):
+            vagalume(surf,tx+(n-1)*31,ty-45,e.relogio+n,OURO,'tila',.5)
+        if e.estado=='coro_aviso':
+            _linha_de_aviso(surf,(x,e.alvo_y-cy),(e.destino-cx,e.alvo_y-cy))
+        return
     if e.indice == 2 and e.estado == 'aviso' and e.tecnica == 'salto':
         from .casco import ponto_salto
         # Mesmo arco parabólico e mesma aterrissagem usados pela simulação.
@@ -263,6 +274,8 @@ def desenhar_encontro(surf,e,cx,cy=0):
             'salto_casco':2,'varrida_casco':2,'muda_casco':3,'muda_coruja':1,'recolhe_coruja':0}.get(e.estado,0)
     if e.indice==0 and e.estado=="aviso" and e.asa_rasteira:
         pose = 2  # abre as asas horizontalmente já na preparação do rasante
+    if e.estado=='coro_aviso':pose=1
+    if e.estado=='coro_investida':pose=2
     imagem = _corpo(e.indice,pose,int(e.relogio*(5 if pose==0 else 8))%4,e.frente)
     caixa = imagem.get_rect(center=(x,y))
     caixa.bottom = min(caixa.bottom, round(e.chao-cy+2))

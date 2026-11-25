@@ -31,7 +31,7 @@ Ver a travessia em movimento.
 | J / S + J no ar | Até três cortes em sequência; ataque para baixo com rebote ao acertar. Cortes também interceptam fios e ferrões. |
 | K | Clarão fixo no mundo, ao custo de 22 de luz. |
 | Q / F | Alternar item / usar o item escolhido (bálsamo, pavio, casulo ou concha). |
-| Tab | Abrir diretamente o mapa local com o objetivo. As setas mudam para o diário e os demais mapas. |
+| Tab / M / C | Mapa por descoberta / mapa / caderno opcional das raízes restauradas. No mapa, direita abre pedidos; cima/baixo e Enter escolhem o rastreio. |
 | P ou Esc | Pausar ou continuar. R na pausa pede confirmação para retornar ao marco. |
 | M / F11 | Silenciar ou reativar som / alternar tela cheia |
 | Setas e Enter, ou mouse | Escolher nos menus. Enter completa a fala e avança. Esc pula o prólogo. |

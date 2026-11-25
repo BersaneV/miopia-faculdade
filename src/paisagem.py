@@ -355,6 +355,10 @@ def icone_item(s,item,x,y,w=24,h=24):
 def objeto(s,o,j,cx,tempo):
     x=o.x-cx
     if not -105<x<1065: return
+    if o.tipo=='sobrevivente':
+        from .arte_resgates import pessoa
+        pessoa(s,o,j,cx,tempo)
+        return
     if o.tipo=='raizes':
         from .arte_raizes import objeto as desenhar_raiz
         desenhar_raiz(s,o,j,cx,tempo)
@@ -582,8 +586,11 @@ class Paisagem:
         desloc=int(cx*1.16)%1200
         if cy<180:
             for x in (-desloc,1200-desloc): s.blit(margens(i),(x,414))
-        compor_luz(self.luz,j,cx,cy,self.brilho_mata)
-        aplicar_nevoa(s,self.luz,cy,fundo_visao,self.brilho_mata)
+        from .arte_resgates import luzes
+        luzes(s,j,cx,t)
+        nivel=min(3,self.brilho_mata+int(j.concluida))
+        compor_luz(self.luz,j,cx,cy,nivel)
+        aplicar_nevoa(s,self.luz,cy,fundo_visao,nivel)
         for v in j.vestigios:
             if v.raio(j.tempo)>16:
                 xy=(round(v.x-cx),round(v.y))
@@ -642,11 +649,16 @@ def hud(s,j):
 
     if j.boss and not j.boss.vencido:
         painel(s,(258,17,402,64))
-        nome=j.boss.nome + (' · II' if getattr(j.boss,'fase',1)==2 else '')
+        fase=getattr(j.boss,'fase',1)
+        nome=j.boss.nome + (' · '+('II' if fase==2 else 'III') if fase>1 else '')
         texto(s,nome,459,22,23,OSSO,"titulo","centerx")
-        pygame.draw.rect(s,(53,55,52),(279,62,360,6))
-        pygame.draw.rect(s,AMBAR,(279,62,round(360*j.boss.vida/j.boss.vida_max),6))
-        texto(s,"Fraqueza exposta = crítico",459,72,10,PALIDO,"normal","centerx")
+        if j.boss.estado.startswith('coro_'):
+            for n in range(3):losango(s,421+n*38,60,6,AMBAR,n<j.boss.coro_sinais)
+            texto(s,'E no ninho: orvalho · K na marca: sinal',459,73,10,PALIDO,'normal','centerx')
+        else:
+            pygame.draw.rect(s,(53,55,52),(279,62,360,6))
+            pygame.draw.rect(s,AMBAR,(279,62,round(360*j.boss.vida/j.boss.vida_max),6))
+            texto(s,"Fraqueza exposta = crítico",459,72,10,PALIDO,"normal","centerx")
     # M abre o mapa sob demanda.
     if j.interacao and not j.dialogo:
         msg="E   "+j.interacao

@@ -25,7 +25,12 @@ class Vestigio:
 
 
 def fontes(j):
-    return [(*j.lume.rect.center,j.raio),*((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios)]
+    from .resgates import fontes as fontes_vivas
+    luzes=[(*j.lume.rect.center,j.raio),*((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios),*fontes_vivas(j)]
+    if j.boss and j.boss.estado.startswith('coro_'):
+        from .ultimo_chamado import alvo
+        luzes.append((*alvo(j.boss),70))
+    return luzes
 
 
 def ponto_visivel(j,ponto,margem=0,terrenos=None):

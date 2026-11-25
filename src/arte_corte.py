@@ -18,7 +18,7 @@ def camadas():
 @lru_cache(maxsize=1)
 def suportes():
     """Galhos ligados ao tronco e escoras naturais dão origem às duas colunas de apoios."""
-    out=pygame.Surface((corte.LARGURA,corte.ALTURA),pygame.SRCALPHA)
+    out=pygame.Surface((2432,corte.ALTURA),pygame.SRCALPHA)
     for centro,ramo in ((370,1),(1224,-1)):
         curva=[(centro+round(math.sin(y*.004)*36),y) for y in range(215,1080,16)]
         margem=[(x-5-int(y*.009),y) for x,y in curva]
@@ -61,6 +61,14 @@ def suportes():
 
 def desenhar_ponto(camada,o,j,cx):
     x=o.x-cx
+    if o.tipo=='sobrevivente':
+        from .arte_resgates import pessoa
+        pessoa(camada,o,j,cx,j.tempo)
+        return
+    if o.tipo in ('jardim','orvalho_jardim'):
+        from .arte_jardim import objeto
+        objeto(camada,o,j,cx)
+        return
     if o.tipo=="passagem":
         from .paisagem import passagem
         passagem(camada,x,o.y,False)
@@ -95,6 +103,9 @@ def desenhar(s,j,t,nivel_brilho):
     camada.blit(bg,(0,cy),recorte)
     fundo_visao=capturar_fundo(camada,cy)
     camada.blit(suportes(),(0,cy),pygame.Rect(cx,cy,960,540))
+    if cx+960>2432:
+        from .arte_jardim import detalhes
+        detalhes(camada,j,cx)
     if cy+540>1060 and cy<1260:
         sprite(camada,"obj_refugio",118-cx,1173,77,63)
     if cy+540>1770:
@@ -130,8 +141,11 @@ def desenhar(s,j,t,nivel_brilho):
     for e in j.inimigos:
         if j.visivel(e.rect.center,18) and cy-50<e.rect.centery<cy+590:
             inimigo(camada,e,cx,j.lume,t)
-    compor_luz(luz,j,cx,cy,nivel_brilho)
-    aplicar_nevoa(camada,luz,cy,fundo_visao,nivel_brilho)
+    from .arte_resgates import luzes
+    luzes(camada,j,cx,t)
+    nivel=min(3,nivel_brilho+int(j.concluida))
+    compor_luz(luz,j,cx,cy,nivel)
+    aplicar_nevoa(camada,luz,cy,fundo_visao,nivel)
     for v in j.vestigios:
         if v.raio(t)>16:
             brilho(camada,(v.x-cx,v.y),20)
