@@ -55,17 +55,33 @@ def margens(i):
 SOMBRAS = ((0, 1, 2), (3, 5, 8), (18, 25, 33), (61, 70, 82))
 
 
-@lru_cache(maxsize=80)
+def aplicar_nevoa(camada, luz, cy=0):
+    """Preserva as cores da floresta; a luz recupera definição, sem fundo preto."""
+    area=pygame.Rect(0,cy,960,540)
+    nitido=camada.subsurface(area).copy()
+    borrado=pygame.transform.smoothscale(pygame.transform.smoothscale(nitido,(48,27)),(960,540))
+    borrado.fill((125,140,155),special_flags=pygame.BLEND_RGB_MULT)
+    inversa=pygame.Surface((960,540));inversa.fill((255,255,255))
+    inversa.blit(luz,(0,0),special_flags=pygame.BLEND_RGB_SUB)
+    borrado.blit(inversa,(0,0),special_flags=pygame.BLEND_RGB_MULT)
+    nitido.blit(luz,(0,0),special_flags=pygame.BLEND_RGB_MULT)
+    borrado.blit(nitido,(0,0),special_flags=pygame.BLEND_RGB_ADD)
+    camada.blit(borrado,(0,cy))
+
+
+@lru_cache(maxsize=16)
 def mascara_luz(raio, brilho_mata):
     r = max(4, raio)
     tom = SOMBRAS[brilho_mata]
     surf = pygame.Surface((r*2, r*2))
     surf.fill(tom)
-    for n in range(r, 0, -2):
-        v = min(1., (1 - n / r) * 1.8)
+    for n in range(r, 0, -8 if r>=900 else -2):
+        v = min(1., (r-n)/100) if r>=900 else min(1., (1 - n / r) * 1.8)
         v = v*v*(3-2*v)
         cor = tuple(round(c+(255-c)*v) for c in tom)
         pygame.draw.circle(surf, cor, (r,r), n)
+        if v>=1:
+            break
     return surf
 
 
@@ -298,6 +314,9 @@ def objeto(s,o,j,cx,tempo):
     y=o.y
     if o.id=="lingueta":
         w,h=30,14
+        if j.visivel((o.x,o.y-8)):
+            brilho(s,(x,y-8),18)
+            pygame.draw.line(s,AMBAR,(x-6,y-9),(x+5,y-12),2)
     if o.tipo=="reserva":
         especie=("casulo","balsamo","pavio","casulo")[j.etapa]
         brilho(s,(x,y-12),22)
@@ -449,7 +468,7 @@ class Paisagem:
                 continue
             self.luz.blit(mascara_luz(r,self.brilho_mata),(round(x-cx)-r,round(y-cy)-r),
                           special_flags=pygame.BLEND_RGB_MAX)
-        s.blit(self.luz,(0,cy),special_flags=pygame.BLEND_RGB_MULT)
+        aplicar_nevoa(s,self.luz,cy)
         for v in j.vestigios:
             if v.raio(j.tempo)>16:
                 xy=(round(v.x-cx),round(v.y))
@@ -500,9 +519,10 @@ def hud(s,j):
     if j.boss and not j.boss.vencido:
         painel(s,(258,17,402,64))
         texto(s,j.boss.nome,459,22,23,OSSO,"titulo","centerx")
-        for n in range(j.boss.meta): losango(s,453+n*14,63,4,AMBAR,n<j.boss.progresso)
-    if not duelo:
-        minimapa(s,j)
+        pygame.draw.rect(s,(53,55,52),(279,62,360,6))
+        pygame.draw.rect(s,AMBAR,(279,62,round(360*j.boss.vida/j.boss.vida_max),6))
+        texto(s,"Fraqueza exposta = crítico",459,72,10,PALIDO,"normal","centerx")
+    # M abre o mapa sob demanda.
     if j.interacao and not j.dialogo:
         msg="E   "+j.interacao
         cx=max(165,min(795,j.lume.rect.centerx-j.camera))
@@ -517,7 +537,7 @@ def hud(s,j):
         texto(s,msg,cx,y+3,15,OSSO,"forte","centerx")
     if j.dialogo: return
     s.blit(placa(960,52,225),(0,488))
-    texto(s,"MAPA  [TAB]",937,505,13,PALIDO,"forte","right")
+    texto(s,"MAPA  [M]",937,505,13,PALIDO,"forte","right")
     from .cartografia import texto_curto
     texto(s,texto_curto(j.objetivo,790,17,"forte"),22,491,17,OSSO,"forte")
     info=j.aviso if j.aviso_t>0 and j.aviso!=j.fase.name else j.dica_local

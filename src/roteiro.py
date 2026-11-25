@@ -41,10 +41,10 @@ CONTROLES = (
     ("S   /   S + Espaço", "Agachar / descer de uma plataforma vazada."),
     ("Shift + direção", "Deslizar. A corrente do córrego exige impulso."),
     ("E", "Conversar, operar mecanismos e abrir bolsas de trilha."),
-    ("J   /   S + J no ar", "Até três cortes em sequência / golpe para baixo com rebote."),
-    ("K", "Clarão de 22 de luz. O local fica iluminado por 6,5 segundos."),
+    ("J / S+J / Shift+J", "Combo / golpe descendente / avanço com direção (8 luz)."),
+    ("K", "Clarão amplo por 6,5 s. Pavio prolonga; resina reduz o custo."),
     ("Q   /   F", "Escolher item na bolsa / usar o item escolhido."),
     ("Tab", "Diário, mapa e pistas dos pedidos dos moradores."),
     ("Esc   ou   P", "Pausar. Na pausa, R retorna ao marco."),
-    ("M   /   F11", "Silenciar / alternar tela cheia."),
+    ("M / F10 / F11", "Mapa / silenciar / alternar tela cheia."),
 )

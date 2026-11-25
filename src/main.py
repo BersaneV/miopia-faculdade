@@ -195,7 +195,7 @@ class App:
         j=self.jogo
         if self.ensaio is not None or not j or j.modo!="historia" or j.estado not in ("jogando","caido"): return
         assinatura=(j.etapa,j.pontuacao,j.lume.vidas,j.checkpoint,len(j.diario),
-                    tuple(sorted(j.flags)),j.bolsa.revisao,j.em_vertical,j.marco_vertical,frozenset(j.cartografia))
+                    tuple(sorted(j.flags)),j.bolsa.revisao,j.em_vertical,j.marco_vertical,frozenset(j.cartografia),frozenset(j.explorado),j.missao)
         if forcar or self.relogio>=self.proximo_save and assinatura!=self.ultimo_save:
             self.mem_camp=j.salvar()
             self.mem.guardar("campanha",self.mem_camp)
@@ -397,7 +397,7 @@ class App:
             self.cheia=not self.cheia
             self.tela=self.janela()
             return
-        if k==pygame.K_m:
+        if k==pygame.K_F10:
             self.mem.prefs["mudo"]=not self.mem.prefs["mudo"]
             self.ajustar_som()
             self.mem.guardar("preferencias",self.mem.prefs)
@@ -417,7 +417,7 @@ class App:
             if self.jogo.dialogo:
                 if k in (*ACEITAR,pygame.K_e,pygame.K_ESCAPE): self.avancar_fala()
             elif k in (pygame.K_ESCAPE,pygame.K_p): self.mudar("pausa")
-            elif k==pygame.K_TAB: self.abrir_diario("jogo")
+            elif k in (pygame.K_TAB,pygame.K_m): self.abrir_diario("jogo")
             elif k==pygame.K_q:
                 if self.gravacao: self.gravacao.acao(self.jogo,"trocar_item")
                 else: self.jogo.trocar_item()
@@ -427,7 +427,11 @@ class App:
                 self.som(resultado or "navegar")
             else: self.bordas.add(k)
         elif est=="diario":
-            if k in (pygame.K_ESCAPE,pygame.K_TAB): self.mudar(self.anterior)
+            if k==pygame.K_r:
+                self.jogo.missao="secundaria" if self.jogo.missao=="principal" else "principal"
+                self.jogo.notificar("Rastreando missão "+self.jogo.missao)
+                return
+            if k in (pygame.K_ESCAPE,pygame.K_TAB,pygame.K_m): self.mudar(self.anterior)
             elif k in (pygame.K_LEFT,pygame.K_RIGHT,pygame.K_a,pygame.K_d):
                 self.pagina=(self.pagina+(-1 if k in (pygame.K_LEFT,pygame.K_a) else 1))%(len(self.jogo.diario)+2+bool(self.jogo.cartografia))
                 self.som("pagina")
@@ -538,6 +542,8 @@ class App:
         j=self.jogo
         ativo=(self.estado=="jogo" or self.estado=="replay" and self.reproducao is not None
                and not self.replay_pausado) and j and not j.dialogo
+        if ativo:
+            self.musica(f"chefe_{j.boss.indice}" if j.boss and not j.boss.vencido else CORES_AUDIO[j.etapa])
         self.audio.ambiente(combate=bool(ativo and j.combate),
                            energia=j.lume.energia if ativo else 100,
                            raizes=j.restauradas if j else 0,suspenso=not ativo)

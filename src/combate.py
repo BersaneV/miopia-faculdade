@@ -17,6 +17,7 @@ class Corte:
 
 
 CORTES = {
+    "avanco": Corte(.04, .18, .42, 100, 3),
     "corte1": Corte(.026, .13, .24, 68, 1),
     "corte2": Corte(.04, .14, .29, 77, 1),
     "corte3": Corte(.075, .17, .42, 85, 2),
@@ -35,11 +36,13 @@ class Arma:
         self.intervalo = 0.
         self.pedido = 0.
         self.pedir_queda = False
+        self.pedir_avanco = False
         self.rebote = 0.
 
-    def pedir(self, queda):
+    def pedir(self, queda, avanco=False):
         self.pedido = .15
         self.pedir_queda = queda
+        self.pedir_avanco = avanco
 
     def avancar(self, dt, lume):
         self.rebote = max(0., self.rebote - dt)
@@ -53,6 +56,9 @@ class Arma:
             baixo = self.pedir_queda and not lume.chao
             self.combo = 0 if baixo else (self.combo % 3 + 1 if self.intervalo > 0 else 1)
             self.tipo = "queda" if baixo else "corte" + str(self.combo)
+            if self.pedir_avanco and lume.chao and lume.energia>=8:
+                self.tipo="avanco"
+                lume.energia-=8
             self.tempo = 0.
             self.face = lume.face
             self.serie += 1

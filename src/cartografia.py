@@ -79,7 +79,16 @@ def mapa_local(s,j,rect,compacto=False):
         else:
             losango(s,px,py,2 if compacto else 4,TEAL,False)
     alvo=alvo_local(j)
-    if alvo:
+    from .descoberta import conhecida, TAMANHO
+    # Apaga somente trechos ainda não percorridos, inclusive partes de uma
+    # plataforma longa que continua para dentro de uma sala desconhecida.
+    for gx in range(mundo.left//TAMANHO,(mundo.right-1)//TAMANHO+1):
+        for gy in range(mundo.top//TAMANHO,(mundo.bottom-1)//TAMANHO+1):
+            if not conhecida(j,gx*TAMANHO,gy*TAMANHO):
+                x,y=ponto(gx*TAMANHO,gy*TAMANHO)
+                x2,y2=ponto((gx+1)*TAMANHO,(gy+1)*TAMANHO)
+                pygame.draw.rect(s,(12,22,24),(x,y,x2-x+1,y2-y+1))
+    if alvo and conhecida(j,alvo.x,alvo.y-20):
         px,py=ponto(alvo.x,alvo.y-20)
         px=max(r.left+6,min(r.right-7,px))
         py=max(r.top+6,min(r.bottom-7,py))
@@ -121,6 +130,9 @@ def rastro_objetivo(s,j):
         return
     alvo=alvo_local(j)
     if alvo is None:
+        return
+    from .descoberta import conhecida
+    if not conhecida(j,alvo.x,alvo.y-20):
         return
     px,py=j.lume.rect.center
     dx,dy=alvo.x-px,alvo.y-20-py

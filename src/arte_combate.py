@@ -8,6 +8,7 @@ CORES = {"fio": (159, 209, 211), "ferrao": (253, 185, 100), "onda": (226, 151, 1
 MEDIDAS = {"morcego": (65, 44), "aranha": (65, 39), "vespa": (61, 42),
            "sombra": (55, 47), "carabideo": (73, 46)}
 def efeito(s, nome, centro, dimensoes, espelho=False):
+    if nome=="avanco": nome="corte3"
     asset = "efeito_" + nome
     textura = imagem(asset + ".png", *dimensoes, espelho)
     s.blit(textura, textura.get_rect(center=centro))

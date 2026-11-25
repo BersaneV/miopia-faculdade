@@ -14,12 +14,12 @@ class Item:
 
 ITENS = (
     Item("balsamo", "Bálsamo de Mimo", "Recupera 35 de luz. Guarde para depois de um golpe ou clarão."),
-    Item("pavio", "Pavio de pólen", "Ilumina o caminho ao seu redor por 12 segundos."),
+    Item("pavio", "Pavio de pólen", "Amplia a visão por 12 s. Clarões lançados nesse tempo duram 11 s."),
     Item("casulo", "Casulo de seda", "Absorve o próximo ataque de uma criatura."),
     Item("concha", "Concha de escuta", "Localiza a criatura mais próxima. Aguarde cinco segundos entre escutas.", True),
     Item("espinho", "Espinho de acácia", "Relíquia ativa ao recolher. Cortes causam 25% mais dano a criaturas comuns.", True, True),
     Item("asa", "Membrana de libélula", "Relíquia ativa ao recolher. Lume anda e plana 12% mais rápido.", True, True),
-    Item("resina", "Resina de âmbar", "Relíquia ativa ao recolher. A luz se consome 35% mais devagar ao explorar.", True, True),
+    Item("resina", "Resina de âmbar", "Relíquia ativa ao recolher. Consumo passivo de luz −35%. Clarão custa 18 em vez de 22.", True, True),
 )
 POR_ID = {item.id: item for item in ITENS}
 

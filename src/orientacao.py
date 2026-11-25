@@ -173,6 +173,19 @@ def objetivo_atual(j):
     if (subsolo.ativo(j) and 2440 <= j.lume.rect.centerx <= 3190
             and j.lume.rect.bottom > CHAO + 50):
         return _subsolo(j)
+    if not j.em_vertical and getattr(j,"missao","principal")=="secundaria":
+        from .narrativa import PEDIDOS
+        if "pedido_aceito" in j.flags and "pedido_entregue" not in j.flags:
+            pedido=PEDIDOS[j.etapa]
+            for flag,pista in pedido.passos:
+                if flag not in j.flags:
+                    ident="no" if flag=="chamado_eco" else flag
+                    o=next((o for o in j.objetos if o.id==ident),None)
+                    if o:
+                        return _alvo(j,o.id,pedido.titulo,pista,o.x,o.y,pista,opcional=True)
+            o=next((o for o in j.objetos if o.tipo=="npc" and o.nome==pedido.destino),None)
+            if o:
+                return _alvo(j,o.id,pedido.destino,pedido.entregar,o.x,o.y,pedido.entregar,opcional=True)
     return _corte(j) if j.em_vertical else _superficie(j)
 
 

@@ -215,6 +215,7 @@ def diario(a,s):
         from .cartografia import alvo_local, mapa_local, texto_curto
         texto(s,"Corte da Figueira" if j.em_vertical else j.fase.name,85,135,23,AMBAR,"titulo")
         texto(s,"Âmbar · Lume     Alvo verde · próximo passo     Círculo · marco",85,168,14,PALIDO)
+        texto(s,"R  história / pedido do morador · Seleção: "+j.missao,85,183,11,AMBAR)
         mapa_local(s,j,(85,197,780,153))
         alvo=alvo_local(j)
         texto(s,texto_curto(j.objetivo,780,17,"forte"),85,362,17,OSSO,"forte")
@@ -230,7 +231,7 @@ def diario(a,s):
             if j.bolsa.fator_dreno<1: bonus.append(f"gasto de luz −{round((1-j.bolsa.fator_dreno)*100)}%")
             texto(s,texto_curto("Relíquias ativas · "+" · ".join(bonus),780,13),85,436,13,AMBAR)
         else:
-            texto(s,"K   um clarão revela o rumo do objetivo por alguns instantes",85,436,13,TEAL)
+            texto(s,"Explore para localizar o alvo. K recupera a nitidez da floresta.",85,436,13,TEAL)
     
     elif a.pagina==1:
         texto(s,"As quatro raízes da figueira",85,143,23,AMBAR,"titulo")
@@ -263,6 +264,7 @@ def registro(a,s):
     paragrafo(s,trecho,83,170,369,16)
     texto(s,"No caderno de campo",481,137,21,AMBAR,"titulo")
     paragrafo(s,m["mensagem"],481,170,389,16)
+    texto(s,"Caderno opcional · resposta educativa, sem alterar a história",83,251,14,PALIDO)
     texto(s,m["pergunta"],83,271,18,OSSO,"forte")
     if a.resposta is None:
         opcoes(a,s,m["opcoes"],77,303,795,38,16)

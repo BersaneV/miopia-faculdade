@@ -85,7 +85,7 @@ def desenhar_ponto(camada,o,j,cx):
 
 
 def desenhar(s,j,t,nivel_brilho):
-    from .paisagem import SOMBRAS, lume, mascara_luz, terreno
+    from .paisagem import SOMBRAS, lume, mascara_luz, terreno, aplicar_nevoa
     bg, camada, luz=camadas()
     cx,cy=round(j.camera),round(j.camera_y)
     tela=pygame.Rect(0,cy,960,540)
@@ -137,7 +137,7 @@ def desenhar(s,j,t,nivel_brilho):
         if r>=4 and x+r>=cx and x-r<=cx+960 and y+r>=cy and y-r<=cy+540:
             luz.blit(mascara_luz(r,nivel_brilho),(round(x-cx-r),round(y-cy-r)),
                      special_flags=pygame.BLEND_RGB_MAX)
-    camada.blit(luz,(0,cy),special_flags=pygame.BLEND_RGB_MULT)
+    aplicar_nevoa(camada,luz,cy)
     for v in j.vestigios:
         if v.raio(t)>16:
             brilho(camada,(v.x-cx,v.y),20)

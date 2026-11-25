@@ -328,7 +328,7 @@ def passo(j,dt,cmd,clarao):
         j.eventos.append("pulo")
     l.rect.left=max(0,min(l.rect.left,LARGURA-l.rect.width))
     if l.rect.top>ALTURA+28:
-        j.perder_fagulha(motivo="queda")
+        j.recuperar_queda()
         return
     if l.chao and not estava_chao:
         j.eventos.append("pouso")

@@ -84,6 +84,9 @@ class Encontro:
         self.estado = "busca"
         self.tempo, self.relogio = 1.65, 0.
         self.progresso = 0
+        self.vida = self.vida_max = 100.
+        self.ultimo_corte = None
+        self.ultimo_golpe_t = -1.
         self.vencido = False
         self.turno = 0
         self.destino = self.esq
@@ -145,7 +148,9 @@ class Encontro:
 
     @property
     def som_aviso(self):
-        return "casco_avanco" if self.indice == 0 and self.asa_rasteira else "aviso"
+        if self.indice==0 and self.asa_rasteira:
+            return "casco_avanco"
+        return ("rasgo","fio_disparo","casco_avanco","pressagio")[self.indice]
 
     def apoios(self):
         """Apoios de mão única; os degraus junto às marcas sempre ficam disponíveis."""
@@ -243,9 +248,10 @@ class Encontro:
     def _atualizar_aberto(self, corpo, golpe, clarao, eventos):
         if self._acertou(corpo, golpe, clarao):
             self.progresso += 1
+            self.vida = max(0.,self.vida-50.)
             self.onda = 1.
             eventos.append("acerto")
-            if self.progresso == self.meta:
+            if self.vida <= 0:
                 self.vencido = True
                 self.estado = "repouso"
                 eventos.append("chefe_resolvido")
@@ -465,7 +471,7 @@ class Encontro:
         elif self.estado == "investida":
             self._voar(dt, corpo, eventos, 415)
 
-    def update(self, dt, corpo, *, ruido=0., golpe=None, clarao=False, interagir=False, direcao=0):
+    def update(self, dt, corpo, *, ruido=0., golpe=None, clarao=False, interagir=False, direcao=0, serie=None, bonus_dano=1.):
         """Recebe bordas de comando (golpe, clarão e E); retorna eventos desta atualização."""
         eventos = []
         self.relogio += dt
@@ -473,6 +479,24 @@ class Encontro:
         self.agua = max(0., self.agua-dt)
         if self.vencido:
             return eventos
+        # A arena aceita um acerto por arco, mesmo quando a fraqueza não está
+        # exposta. Um crítico mantém o valor dos mecanismos de cada guardião.
+        identificador=("pulso",self.relogio) if clarao else serie
+        novo = identificador != self.ultimo_corte if identificador is not None else self.relogio-self.ultimo_golpe_t>.3
+        fraco = self.estado=="aberto" and self._acertou(corpo,golpe,clarao)
+        corpo_chefe=pygame.FRect(self.x-46,self.y-55,92,110)
+        acertou = golpe is not None and corpo_chefe.colliderect(golpe)
+        if novo and (acertou or (clarao and hypot(corpo.centerx-self.x,corpo.centery-self.y)<214)):
+            self.ultimo_corte=identificador
+            self.ultimo_golpe_t=self.relogio
+            if not fraco:
+                self.vida=max(0.,self.vida-2.*bonus_dano)
+                eventos.append("acerto")
+                if self.vida<=0:
+                    self.vencido=True;self.estado="repouso"
+                    eventos.append("chefe_resolvido")
+                    return eventos
+        dt *= 1.2
         self.tempo -= dt
         if interagir:
             self._usar(corpo, eventos)

@@ -206,9 +206,9 @@ class Lume:
 
     def atacar(self, cmd):
         if cmd.golpe:
-            self.arma.pedir(cmd.baixo and not self.chao)
-        if cmd.clarao and self.pulso_cd <= 0 and self.energia > 22:
-            self.energia -= 22.
+            self.arma.pedir(cmd.baixo and not self.chao, cmd.deslize and bool(cmd.mover))
+        if cmd.clarao and self.pulso_cd <= 0 and self.energia >= getattr(self,"custo_clarao",22.):
+            self.energia -= getattr(self,"custo_clarao",22.)
             self.pulso, self.pulso_cd = .55, 2.50
             return True
         return False
@@ -242,6 +242,8 @@ class Jornada:
         self.em_vertical = False
         self.camera_y = 0.
         self.cartografia = set()
+        self.explorado = set()
+        self.missao = "principal"
         self.marco_vertical = "bosque"
         self.destino_vertical = None
         self.motivo_morte = ""
@@ -297,7 +299,7 @@ class Jornada:
     def salvar(self):
         """Salva o progresso assentado. Objetos transitórios da arena renascem no marco."""
         return {
-            "versao": 3,
+            "versao": 3, "explorado": sorted(self.explorado), "missao": self.missao,
             "corte": {"ativo": self.em_vertical, "marco": self.marco_vertical,
                       "memoria": sorted(self.cartografia)}, "modo": self.modo, "dificuldade": self.dificuldade,
             "etapa": self.etapa, "volta": self.volta, "vidas": self.lume.vidas,
@@ -318,6 +320,11 @@ class Jornada:
             raise ValueError("Bioma desconhecido")
         jogo = cls(dados["modo"], dados["dificuldade"], etapa)
         jogo.volta = max(0, int(dados["volta"]))
+        memoria = dados.get("explorado", [])
+        if not isinstance(memoria,list) or len(memoria)>10000 or not all(isinstance(v,str) and len(v)<80 for v in memoria):
+            raise ValueError("Mapa descoberto inválido")
+        jogo.explorado = set(memoria)
+        jogo.missao = "secundaria" if dados.get("missao")=="secundaria" else "principal"
         for visita in dados["fases"]:
             nivel = int(visita["etapa"])
             if not 0 <= nivel < len(FASES):
@@ -526,6 +533,7 @@ class Jornada:
     def recolocar(self, pos):
         self.lume.rect.size = (24, self.lume.ALTURA)
         self.lume.rect.midbottom = pos
+        self.retorno_queda = tuple(pos)
         self.lume.vx = self.lume.vy = 0.
         self.lume.coyote = self.lume.buffer = self.lume.slide = self.lume.slide_cd = 0.
         self.lume.golpe = self.lume.pulso = self.lume.impacto = 0.
@@ -543,6 +551,7 @@ class Jornada:
     def aplicar_reliquias(self):
         self.lume.bonus_dano = self.bolsa.bonus_dano
         self.lume.bonus_velocidade = self.bolsa.bonus_velocidade
+        self.lume.custo_clarao = 18. if self.bolsa.estoque["resina"] else 22.
 
     def notificar(self, texto, segundos=3.8):
         self.aviso, self.aviso_t = texto, segundos
@@ -602,6 +611,22 @@ class Jornada:
         self.lume.iframes, self.lume.impacto = 1.25, .25
         self.lume.energia = max(0., self.lume.energia - self.dano)
         self.eventos.append("dano")
+
+    def recuperar_queda(self):
+        energia=self.lume.energia-25.
+        if energia<=0:
+            self.perder_fagulha(motivo="queda")
+            return
+        destino=getattr(self,"retorno_queda",self.checkpoint)
+        self.recolocar(destino)
+        self.lume.energia=energia
+        self.lume.iframes=1.5
+        self.eventos.append("dano")
+        self.notificar("A queda custou 25 de luz. Lume voltou à última borda segura.")
+        if self.em_vertical:
+            corte_vertical.camera(self)
+        elif subsolo.ativo(self):
+            subsolo.camera(self)
 
     def perder_fagulha(self, motivo="energia"):
         if self.estado != "jogando":
@@ -726,7 +751,7 @@ class Jornada:
                 return
         clarao = self.lume.atacar(cmd)
         if clarao:
-            self.vestigios.append(Vestigio(*self.lume.rect.center, self.tempo))
+            self.vestigios.append(Vestigio(*self.lume.rect.center, self.tempo, 11. if self.bolsa.luz_ate>self.tempo else DURACAO))
             self.eventos.append("pulso")
             if not self.em_vertical:
                 narrativa.responder_chamado(self)
@@ -744,8 +769,14 @@ class Jornada:
 
     def passo(self, dt, cmd, clarao):
         l = self.lume
+        from .descoberta import revelar
+        revelar(self)
+        if l.chao and not l.em_corda and l.energia>0 and any(
+                abs(l.rect.bottom-t.rect.top)<1.5 and l.rect.right>t.rect.left
+                and l.rect.left<t.rect.right for t in self.solidos):
+            self.retorno_queda = tuple(l.rect.midbottom)
         self.tempo += dt
-        while self.vestigios and self.tempo - self.vestigios[0].inicio >= DURACAO:
+        while self.vestigios and self.tempo - self.vestigios[0].inicio >= self.vestigios[0].duracao:
             self.vestigios.pop(0)
         self.aviso_t = max(0., self.aviso_t - dt)
         if self.aviso_t <= 0: self.aviso = ""
@@ -781,7 +812,7 @@ class Jornada:
         if pouso: self.eventos.append("pouso")
         if cmd.deslize and l.slide >= .60: self.eventos.append("deslize")
         if l.rect.top > subsolo.limite_queda(self):
-            self.perder_fagulha(motivo="queda")
+            self.recuperar_queda()
             return
         for o in self.objetos:
             if o.tipo == "orvalho" and l.rect.inflate(16, 18).collidepoint(o.x, o.y):
@@ -818,7 +849,8 @@ class Jornada:
             l.rect.left = max(l.rect.left, ARENA)
             ruido = 1.0 if l.slide > 0 or pouso else min(.66, abs(l.vx) / 360) if l.chao else .08
             eventos = self.boss.update(dt, l.rect, ruido=ruido, golpe=golpe, clarao=clarao,
-                                       interagir=cmd.interagir, direcao=cmd.mover)
+                                       interagir=cmd.interagir, direcao=cmd.mover,
+                                       serie=l.arma.serie,bonus_dano=l.bonus_dano)
             self.eventos.extend(e for e in eventos if e != "dano_jogador")
             if "dano_jogador" in eventos: self.ferir()
             if self.boss.vencido:
