@@ -51,6 +51,9 @@ class Audio:
                 nome=p.stem
                 if nome.startswith("trilha_"): self.trilhas[nome[7:]]=p
                 else: self.fx[nome]=pygame.mixer.Sound(str(p))
+            # A trilha é decodificada durante a reprodução. Ogg prevalece
+            # sobre o WAV de mesmo nome em uma instalação atualizada.
+            self.trilhas.update((p.stem[7:], p) for p in self.pasta.glob("trilha_*.ogg"))
             for n,nome in enumerate(("camada_combate","camada_pulso","camada_vida")):
                 canal=pygame.mixer.Channel(n)
                 canal.set_volume(0.)

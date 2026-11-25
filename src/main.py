@@ -241,7 +241,7 @@ class App:
 
     def jogar(self):
         self.mudar("jogo")
-        self.musica(CORES_AUDIO[self.jogo.etapa])
+        self.musica(self.tema_jornada())
 
     def nova_fala(self,msg):
         self.pagina_fala=0
@@ -616,15 +616,22 @@ class App:
             self.som("passo")
             self.passo_som=.34
 
+    def tema_jornada(self):
+        j=self.jogo
+        if j.boss and not j.boss.vencido:
+            return "chefe_final" if j.boss.coro_iniciado else f"chefe_{j.boss.indice}"
+        if j.minichefe is not None:
+            return "chefe_caruncho"
+        if j.em_vertical and j.lume.rect.centerx>=2432:
+            return "jardim"
+        return "retorno" if j.concluida else CORES_AUDIO[j.etapa]
+
     def mix(self,dt):
         j=self.jogo
         ativo=(self.estado=="jogo" or self.estado=="replay" and self.reproducao is not None
                and not self.replay_pausado) and j and not j.dialogo
         if ativo:
-            self.musica(('chefe_final' if j.boss.coro_iniciado else f'chefe_{j.boss.indice}')
-                        if j.boss and not j.boss.vencido else 'chefe_2' if j.minichefe is not None else
-                        'jardim' if j.em_vertical and j.lume.rect.centerx>=2432 else
-                        'retorno' if j.concluida else CORES_AUDIO[j.etapa])
+            self.musica(self.tema_jornada())
         self.audio.ambiente(combate=bool(ativo and j.combate),
                            energia=j.lume.vida if ativo else 100,
                            raizes=j.restauradas if j else 0,suspenso=not ativo)
