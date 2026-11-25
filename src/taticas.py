@@ -55,6 +55,8 @@ class Habitante(Inimigo):
         dx=abs(lume.rect.centerx-self.rect.centerx)
         if dx>330 or segmento_bloqueado(self.rect.center,lume.rect.center,terrenos):return False
         acao=FAMILIAS[self.tipo][indice]
+        if self.carabideo_com_alvo_acima(lume):
+            return acao == "salto" and self.salto_alto_viavel(lume, terrenos)
         if acao in ("salto","pique"):
             return dx<=155 and abs(lume.rect.centery-self.rect.centery)<85 and self.salto_livre(self.alvo_observado(lume),terrenos)
         if acao in ("mordida","varredura","rasteira"):return dx<160
@@ -112,6 +114,8 @@ class Habitante(Inimigo):
         self.tecnica={"eco":"eco","orbe":"eco","veneno":"ferrao","leque_fio":"fio","leque_ferrao":"ferrao",
             "onda_dupla":"onda","mordida":"rasteira","varredura":"rasteira",
             "fenda_dupla":"fenda","pique":"salto","queda":"mergulho","rasante_baixo":"rasante"}.get(acao,acao)
+        if acao == "salto" and self.carabideo_com_alvo_acima(lume):
+            self.tecnica = "salto_alto"
         self.sequencia+=1
         self.frente=1 if lume.rect.centerx>=self.rect.centerx else -1
         self.alvo=self.alvo_observado(lume);self.inicio=Vetor(self.rect.center)

@@ -488,7 +488,7 @@ class Jornada:
                    enumerate(self.gotas) if f"gota_{n}" not in self.flags)
         tipo_marco='marco' if recursos.limitado(self) else 'refugio'
         out.extend((
-            Objeto("abrigo", "refugio", 114 if self.etapa == 0 else 82, CHAO, "Descansar sob a casca"),
+            Objeto("abrigo", "refugio", 70 if self.etapa == 0 else 82, CHAO, "Descansar sob a casca"),
             Objeto("abrigo_npc", "npc", 163, CHAO, ("Mimo", "Brasa", "Candeia", "Brasa")[self.etapa]),
             Objeto("atalho", "atalho", 1756, CHAO, "Abrir atalho ao abrigo" if "atalho" not in self.flags else "Voltar ao abrigo"),
             Objeto("meio", tipo_marco, MEIO, CHAO, "Guardar retorno no ramal"),

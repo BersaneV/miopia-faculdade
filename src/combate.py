@@ -163,6 +163,8 @@ ESPECIES = {
     "cobra": Especie(6, (56,27),260,.58,340,"silvo_perto"),
 }
 AEREOS = ("morcego", "vespa")
+ALTURA_SALTO = 49
+ALTURA_SALTO_ALTO = 112
 
 
 def segmento_bloqueado(inicio, fim, terrenos):
@@ -172,6 +174,12 @@ def segmento_bloqueado(inicio, fim, terrenos):
 def direcao(inicio, fim):
     delta = Vetor(fim) - inicio
     return delta.normalize() if delta.length_squared() > .01 else Vetor(1, 0)
+
+
+def ponto_salto(inicio, x_final, fase, altura):
+    ponto = inicio.lerp((x_final, inicio.y), fase)
+    ponto.y -= math.sin(fase * math.pi) * altura
+    return ponto
 
 
 @dataclass
@@ -255,7 +263,7 @@ class Inimigo:
         novo = self.rect.copy()
         novo.x += dx
         if not any(not t.atravessavel and pygame.FRect(t.rect).colliderect(novo) for t in terrenos):
-            if self.tipo in AEREOS or (self.tecnica == "salto" and self.estado == "investida") or not terrenos:
+            if self.tipo in AEREOS or (self.tecnica in ("salto", "salto_alto") and self.estado == "investida") or not terrenos:
                 self.rect.x = novo.x
             else:
                 frente = novo.right - 1 if dx > 0 else novo.left + 1
@@ -284,7 +292,17 @@ class Inimigo:
         previsao = max(-40., min(40., lume.vx*.16))
         return Vetor(lume.rect.centerx + previsao, lume.rect.centery)
 
-    def salto_livre(self, alvo, terrenos):
+    def carabideo_com_alvo_acima(self, lume):
+        return self.tipo == "carabideo" and lume.rect.bottom <= self.rect.top
+
+    def salto_alto_viavel(self, lume, terrenos):
+        alvo = self.alvo_observado(lume)
+        # A aproximação é curta para alcançar Lume perto do ápice do arco.
+        return (abs(alvo.x - self.rect.centerx) <= 72
+                and self.rect.centery - alvo.y <= 145
+                and self.salto_livre(alvo, terrenos, ALTURA_SALTO_ALTO))
+
+    def salto_livre(self, alvo, terrenos, altura=ALTURA_SALTO):
         """Confere o mesmo arco usado pelo ataque, com espaço para o corpo.
 
         Segmentos curtos varrem o volume entre amostras, incluindo paredes
@@ -293,16 +311,13 @@ class Inimigo:
         if not terrenos:
             return True
         inicio = Vetor(self.rect.center)
-        destino = Vetor(alvo.x, inicio.y)
         base = self.rect.bottom
         if not all(any(t.rect.collidepoint(x, base+2) for t in terrenos)
-                   for x in (destino.x-self.rect.w*.35, destino.x+self.rect.w*.35)):
+                   for x in (alvo.x-self.rect.w*.35, alvo.x+self.rect.w*.35)):
             return False
         anterior = inicio
         for n in range(1, 33):
-            fase = n/32
-            ponto = inicio.lerp(destino, fase)
-            ponto.y -= math.sin(fase*math.pi)*49
+            ponto = ponto_salto(inicio, alvo.x, n / 32, altura)
             for t in terrenos:
                 if t.atravessavel:
                     continue
@@ -352,6 +367,8 @@ class Inimigo:
             return "mergulho" if abs(dx) < 78 else "ferrao"
         if self.tipo == "sombra":
             return "fenda" if abs(dx) > 84 or self.sequencia % 2 == 0 else "rasteira"
+        if self.carabideo_com_alvo_acima(lume):
+            return "salto_alto" if self.salto_alto_viavel(lume, terrenos) else ""
         return "onda" if abs(dx) < 97 or lume.rect.bottom < self.rect.top else "carga"
 
     def preparar(self, lume, terrenos=()):
@@ -376,7 +393,8 @@ class Inimigo:
             self.alvo.y = self.origem[1]
         self.estado, self.t = "aviso", self.ficha.aviso / self.ritmo
         return {"fio":"fio_disparo", "ferrao":"ferrao", "fenda":"pressagio",
-                "carga":"casco_avanco", "onda":"casco_avanco"}.get(self.tecnica, "rasgo")
+                "carga":"casco_avanco", "onda":"casco_avanco",
+                "salto_alto":"aviso_carabideo_4"}.get(self.tecnica, "rasgo")
 
     def disparar(self, tipo, origem, vetor, vida):
         self.projeteis.append(Projetil(tipo, Vetor(origem), Vetor(vetor), vida))
@@ -399,7 +417,7 @@ class Inimigo:
         elif self.tecnica in ("carga", "rasteira", "rasante"):
             self.vetor.update(self.frente*self.ficha.vigor*self.ritmo, 0)
             self.duracao = .55
-        elif self.tecnica == "salto":
+        elif self.tecnica in ("salto", "salto_alto"):
             self.duracao = .55
         elif self.tecnica == "fenda":
             self.duracao = .24
@@ -410,10 +428,10 @@ class Inimigo:
         if self.tecnica == "fenda":
             marca = pygame.FRect(self.alvo.x-28, self.alvo.y-39, 56, 39)
             contato = marca.colliderect(lume.rect)
-        elif self.tecnica == "salto":
+        elif self.tecnica in ("salto", "salto_alto"):
             fase = min(1., max(0., 1-self.t/self.duracao))
-            destino = self.inicio.lerp((self.alvo.x, self.inicio.y), fase)
-            destino.y -= math.sin(fase*math.pi) * 49
+            altura = ALTURA_SALTO_ALTO if self.tecnica == "salto_alto" else ALTURA_SALTO
+            destino = ponto_salto(self.inicio, self.alvo.x, fase, altura)
             self.mover(destino.x-self.rect.centerx, destino.y-self.rect.centery, terrenos)
             contato = self.rect.colliderect(lume.rect)
         elif self.tecnica in ("mergulho", "rasante", "carga", "rasteira"):

@@ -97,6 +97,7 @@ class Encontro:
         self.impacta = False
         self.atingiu = False
         self.asa_rasteira = False
+        self.asa_mira_no_ar = False
         self.fios = []
         self.segundo_fio = None
         self.tramas = []
@@ -142,6 +143,8 @@ class Encontro:
         if self.estado == "aberto":
             return self.ficha.janela
         if self.indice == 0 and self.estado in ("aviso", "investida"):
+            if self.asa_mira_no_ar:
+                return "Ela marcou sua altura. Saia da linha de voo."
             if self.asa_rasteira:
                 return "Asas abertas rente ao apoio. Salte quando ela se aproximar."
             return "Asas recolhidas na altura do peito. Abaixe-se para ela passar."
@@ -330,9 +333,23 @@ class Encontro:
             else:
                 self._mudar("busca", .95)
 
+    def _asa_altura_da_mira(self, corpo):
+        apoio = next((a for a in self.apoios()
+                      if a.left < corpo.right and corpo.left < a.right
+                      and abs(corpo.bottom - a.top) <= 3), None)
+        self.asa_mira_no_ar = apoio is None and corpo.bottom <= self.chao - 45
+        # No chão e nos apoios, a segunda fase alterna ataques baixos e de peito.
+        self.asa_rasteira = not self.asa_mira_no_ar and self.progresso > 0 and (
+            corpo.height <= 24 or (not self.asa_rasteira and corpo.bottom >= self.chao - 20))
+        if self.asa_mira_no_ar:
+            return corpo.centery
+        piso = apoio.top if apoio is not None else self.chao
+        return piso - (10 if self.asa_rasteira else 31)
+
     def _asa(self, dt, corpo, eventos):
         if self.estado == "busca":
-            self.y = aproximar(self.y, self.chao-93+sin(self.relogio*3)*5, dt*120)
+            altura_vigia = self.chao - 93 + sin(self.relogio * 3) * 5
+            self.y = aproximar(self.y, min(altura_vigia, corpo.centery), dt * 120)
             if self.tempo <= 0:
                 esquerda = corpo.centerx <= self.esq+133
                 direita = corpo.centerx >= self.dir-133
@@ -343,18 +360,8 @@ class Encontro:
                     self._mudar("contorna", .65)
                     self.destino = self.dir if destino < (self.esq+self.dir)/2 else self.esq
                 else:
-                    # Só adapta a investida depois da primeira ferida. A mira usa
-                    # a postura visível neste instante, nunca o comando de Lume.
-                    self.asa_rasteira = self.progresso > 0 and (
-                        corpo.height <= 24 or (not self.asa_rasteira and corpo.bottom >= self.chao-20))
-                    piso = self.chao
-                    if self.progresso and corpo.bottom <= self.chao-45:
-                        apoio = next((a for a in self.apoios() if a.left <= corpo.centerx < a.right
-                                      and abs(corpo.bottom-a.top) <= 3), None)
-                        if apoio is not None:
-                            piso = apoio.top
-                    altura = 10 if self.asa_rasteira else 31
-                    self._aviso_investida(destino, piso-altura, .78 if self.progresso else .95,
+                    altura = self._asa_altura_da_mira(corpo)
+                    self._aviso_investida(destino, altura, .78 if self.progresso else .95,
                                          impacta, eventos)
         elif self.estado == "contorna":
             self.x = aproximar(self.x, self.destino, 330*dt)
