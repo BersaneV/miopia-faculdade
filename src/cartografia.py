@@ -1,5 +1,6 @@
 """Mapa jogável e rumo do clarão, ambos derivados da geometria e do objetivo atual."""
 import math
+from itertools import chain
 
 import pygame
 
@@ -77,16 +78,25 @@ def mapa_local(s,j,rect,compacto=False,*,janela_mundo=None):
         else:
             losango(s,px,py,2 if compacto else 4,TEAL,False)
     alvo=alvo_local(j)
-    from .descoberta import conhecida, TAMANHO
+    from .descoberta import chave, conhecida, TAMANHO
     # Apaga somente trechos ainda não percorridos, inclusive partes de uma
     # plataforma longa que continua para dentro de uma sala desconhecida.
     largura,altura=dimensoes(j)
-    for gx in range(max(0,math.floor(mundo.left/TAMANHO)),min(math.ceil(largura/TAMANHO),math.ceil(mundo.right/TAMANHO))):
-        for gy in range(max(0,math.floor(mundo.top/TAMANHO)),min(math.ceil(altura/TAMANHO),math.ceil(mundo.bottom/TAMANHO))):
-            if not conhecida(j,gx*TAMANHO,gy*TAMANHO):
-                x,y=ponto(gx*TAMANHO,gy*TAMANHO)
-                x2,y2=ponto((gx+1)*TAMANHO,(gy+1)*TAMANHO)
+    colunas=range(max(0,math.floor(mundo.left/TAMANHO)),
+                  min(math.ceil(largura/TAMANHO),math.ceil(mundo.right/TAMANHO)))
+    linhas=range(max(0,math.floor(mundo.top/TAMANHO)),
+                 min(math.ceil(altura/TAMANHO),math.ceil(mundo.bottom/TAMANHO)))
+    for gx in colunas:
+        prefixo=chave(j,gx*TAMANHO,0).removesuffix('0')
+        descobertas=(gy for gy in linhas if prefixo+str(gy) in j.explorado)
+        inicio=linhas.start
+        # Cada célula descoberta encerra uma faixa de células ocultas.
+        for gy in chain(descobertas,(linhas.stop,)):
+            if inicio<gy:
+                x,y=ponto(gx*TAMANHO,inicio*TAMANHO)
+                x2,y2=ponto((gx+1)*TAMANHO,gy*TAMANHO)
                 pygame.draw.rect(s,(12,22,24),(x,y,x2-x+1,y2-y+1))
+            inicio=gy+1
     if alvo and mundo.collidepoint(alvo.x,alvo.y-20) and conhecida(j,alvo.x,alvo.y-20):
         px,py=ponto(alvo.x,alvo.y-20)
         px=max(r.left+6,min(r.right-7,px))
