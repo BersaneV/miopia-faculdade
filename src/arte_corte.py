@@ -1,0 +1,192 @@
+"""Desenho do corte em coordenadas do mundo e mapa local de descoberta."""
+from functools import lru_cache
+import math
+
+import pygame
+from .arte_combate import inimigo, projeteis
+from . import corte_vertical as corte
+from .ilustracao import AMBAR, OSSO, PALIDO, TEAL, brilho, imagem, losango, sprite, texto
+
+
+@lru_cache(maxsize=1)
+def camadas():
+    fundo=imagem("corte_da_figueira.jpg",1144,1670).copy()
+    fundo.fill((186,198,199),special_flags=pygame.BLEND_RGB_MULT)
+    return fundo,pygame.Surface((960,corte.ALTURA+80)),pygame.Surface((960,540))
+
+
+@lru_cache(maxsize=1)
+def suportes():
+    """Galhos ligados ao tronco e escoras naturais dão origem às duas colunas de apoios."""
+    out=pygame.Surface((corte.LARGURA,corte.ALTURA),pygame.SRCALPHA)
+    for centro,ramo in ((370,1),(1224,-1)):
+        curva=[(centro+round(math.sin(y*.004)*36),y) for y in range(215,1080,16)]
+        margem=[(x-5-int(y*.009),y) for x,y in curva]
+        outra=[(x+6+int(y*.008),y) for x,y in curva]
+        pygame.draw.polygon(out,(37,46,40,220),margem+list(reversed(outra)))
+        pygame.draw.lines(out,(83,91,73,210),False,margem,2)
+        for tr in corte.terrenos():
+            if tr.tipo!="plataforma" or not 338 < tr.rect.top < 970: continue
+            if (tr.rect.centerx<800) != (ramo==1): continue
+            h=tr.rect.top
+            x=centro+round(math.sin((h+58)*.004)*36)
+            destino=tr.rect.centerx
+            base=[(x,h+57),(x+ramo*19,h+48),(destino-ramo*33,h+24),(destino,h+9)]
+            pygame.draw.lines(out,(52,60,49,235),False,base,8)
+            pygame.draw.lines(out,(98,101,77,230),False,base,1)
+    # A régua de cheia pertence ao poço; marcas e água reaparecem sob o jogador.
+    for n in range(10):
+        yy=1485-n*9
+        pygame.draw.line(out,(127,143,119,220),(814,yy),(814+(10 if n%3==0 else 5),yy-1),2)
+    pygame.draw.line(out,(103,114,94,210),(812,1490),(812,1392),3)
+    return out
+
+def desenhar_ponto(camada,o,j,cx):
+    x=o.x-cx
+    if o.tipo=="passagem":
+        # Boca emoldurada, aberta dos dois lados; o pé coincide com o apoio.
+        for lado in (-1,1):
+            pts=[(x+lado*30,o.y),(x+lado*31,o.y-26),(x+lado*24,o.y-54),(x+lado*4,o.y-70)]
+            pygame.draw.lines(camada,(79,74,59),False,pts,5)
+            pygame.draw.lines(camada,(171,144,98),False,pts,1)
+        losango(camada,x,o.y-47,5,AMBAR,False)
+        return
+    if o.tipo=="elevador":
+        if "ralo_aberto" in j.cartografia:
+            pygame.draw.line(camada,(151,129,86),(x,o.y-20),(x,o.y),3)
+            losango(camada,x,o.y-11,6,AMBAR,False)
+        return
+    item={"valvula":"valvula", "refugio":"refugio", "registro":"registro"}[o.tipo]
+    w,h={"valvula":(46,53),"refugio":(72,61),"registro":(32,25)}[o.tipo]
+    sprite(camada,"obj_"+item,x,o.y,w,h)
+
+
+def desenhar(s,j,t,nivel_brilho):
+    from .paisagem import SOMBRAS, lume, mascara_luz, terreno
+    bg, camada, luz=camadas()
+    cx,cy=round(j.camera),round(j.camera_y)
+    tela=pygame.Rect(0,cy,960,540)
+    camada.set_clip(tela)
+    recorte=pygame.Rect(round(cx*(bg.get_width()-960)/(corte.LARGURA-960)),
+                         round(cy*(bg.get_height()-540)/(corte.ALTURA-540)),960,540)
+    camada.blit(bg,(0,cy),recorte)
+    camada.blit(suportes(),(0,cy),pygame.Rect(cx,cy,960,540))
+    if cy+540>1060 and cy<1260:
+        sprite(camada,"obj_refugio",118-cx,1173,77,63)
+    if cy+540>1770:
+        for n in range(4):
+            y=1802+n*6
+            pts=[(x-cx,y+math.sin(x*.04+t*1.6+n)*2) for x in range(52,1410,14)]
+            pygame.draw.lines(camada,(62+n*3,91+n*3,91+n*3),False,pts,1)
+    # A corda percorre várias telas e serve de referência contínua de altura.
+    cor=(149,121,81) if "ralo_aberto" in j.cartografia else (75,77,72)
+    for x in (1037,1043):
+        pygame.draw.line(camada,cor,(x-cx,298),(x-cx,1828),1)
+    for y in range(320,1828,32):
+        pygame.draw.line(camada,cor,(1036-cx,y+3),(1044-cx,y),1)
+    for tr in corte.terrenos():
+        if tr.rect.bottom+30>=cy and tr.rect.top-18<=cy+540:
+            i=3 if tr.rect.y>=1200 else 0
+            terreno(camada,tr,cx,i)
+    for o in j.objetos:
+        if cy-10<o.y<cy+630 and cx-60<o.x<cx+1020:
+            desenhar_ponto(camada,o,j,cx)
+    for n in range(24):
+        x=int(n*131+math.sin(t*.4+n)*9)%corte.LARGURA
+        y=int((n*83-t*(n%3+1))%corte.ALTURA)
+        if cx<x<cx+960 and cy<y<cy+540:
+            pygame.draw.circle(camada,(151,153,125),(x-cx,y),1)
+    if j.destino_vertical is not None:
+        py=j.lume.rect.bottom
+        pygame.draw.line(camada,(165,143,103),(1019-cx,py+1),(1061-cx,py+1),4)
+    for e in j.inimigos:
+        if j.visivel(e.rect.center,18) and cy-50<e.rect.centery<cy+590:
+            inimigo(camada,e,cx,j.lume,t)
+    luz.fill(SOMBRAS[nivel_brilho])
+    fontes=[(*j.lume.rect.center,j.raio)]
+    fontes.extend((v.x,v.y,v.raio(t)) for v in j.vestigios)
+    for x,y,raio in fontes:
+        r=round(raio/4)*4
+        if r>=4 and x+r>=cx and x-r<=cx+960 and y+r>=cy and y-r<=cy+540:
+            luz.blit(mascara_luz(r,nivel_brilho),(round(x-cx-r),round(y-cy-r)),
+                     special_flags=pygame.BLEND_RGB_MAX)
+    camada.blit(luz,(0,cy),special_flags=pygame.BLEND_RGB_MULT)
+    for v in j.vestigios:
+        if v.raio(t)>16:
+            brilho(camada,(v.x-cx,v.y),20)
+    for e in j.inimigos:
+        projeteis(camada,e,cx,j.lume,j.raio,j.visivel)
+    lume(camada,j.lume,cx,t)
+    s.blit(camada,(0,0),tela)
+    camada.set_clip(None)
+
+
+# Os contornos mostram volumes exploráveis e suas ligações. As duas colunas de
+# travessia correspondem às plataformas do mundo; o braço oeste contém o arquivo.
+SALAS_MAPA = (
+    ("copa","Copa do Observatório","Janela alta do Bosque",(155,205,1213,170),(69,82,65)),
+    ("galeria","Galeria dos Casulos","Entrada da superfície",(48,816,1316,218),(63,79,75)),
+    ("arquivo","Arquivo da Casca","Desvio no oeste",(63,1065,343,217),(92,77,62)),
+    ("poco","Poço da Seiva","Marco e régua de cheia",(124,1360,1205,176),(58,72,81)),
+    ("cisterna","Cisterna das Duas Margens","Contrapeso e canal",(36,1670,1358,179),(54,76,82)),
+)
+
+
+def mapa(s,j,rect):
+    r=pygame.Rect(rect)
+    desenho=pygame.Rect(r.x,r.y,round(r.w*.52),r.h)
+    pygame.draw.rect(s,(15,26,33),desenho)
+    pygame.draw.rect(s,(57,74,75),desenho,1)
+    # Reserva lateral para as entradas da superfície e preserva a altura do corte.
+    sy=(desenho.height-18)/corte.ALTURA
+    sx=min((desenho.width-32)/corte.LARGURA,sy*1.46)
+    ponto_x=desenho.centerx-round(corte.LARGURA*sx/2)
+    def tela(x,y):
+        return round(ponto_x+x*sx),round(desenho.y+9+y*sy)
+    def faixa(x,y,w,h):
+        return pygame.Rect(*tela(x,y),max(1,round(w*sx)),max(1,round(h*sy)))
+
+    vistos=j.cartografia
+    # Planta do caminho central, do poço oriental e do corredor do arquivo.
+    for origem,fim,x,y,w,h in (
+        ("copa","galeria",420,360,148,479),("copa","galeria",1002,360,127,479),
+        ("galeria","poco",602,990,132,400),("galeria","poco",1001,990,153,400),
+        ("arquivo","galeria",389,1107,268,91),("poco","cisterna",550,1464,146,241),
+        ("poco","cisterna",1038,1464,147,241)):
+        if "viu_"+origem in vistos and "viu_"+fim in vistos:
+            pg=faixa(x,y,w,h)
+            pygame.draw.rect(s,(49,65,64),pg)
+            pygame.draw.rect(s,(105,122,108),pg,1)
+    for ident,nome,dica,geo,cor in SALAS_MAPA:
+        if "viu_"+ident not in vistos: continue
+        pg=faixa(*geo)
+        pygame.draw.rect(s,cor,pg)
+        pygame.draw.rect(s,tuple(min(255,v+61) for v in cor),pg,1)
+    for tr in corte.terrenos():
+        ident=corte.setor(tr.rect.y,tr.rect.centerx)[0]
+        if "viu_"+ident not in vistos: continue
+        pygame.draw.line(s,(109,131,117),tela(tr.rect.left,tr.rect.top),tela(tr.rect.right,tr.rect.top),1)
+    for o in corte.PONTOS:
+        if "viu_"+corte.setor(o.y,o.x)[0] not in vistos: continue
+        if o.tipo=="passagem":
+            losango(s,*tela(o.x,o.y),4,AMBAR,False)
+        elif o.id in ("marco_poco","ralo_cisterna","selo_copa"):
+            pygame.draw.circle(s,PALIDO,tela(o.x,o.y),3,1)
+    if "ralo_aberto" in vistos:
+        cx,_=tela(1040,0)
+        for y in range(tela(0,316)[1],tela(0,1828)[1],5):
+            pygame.draw.line(s,(168,144,97),(cx,y),(cx,y+2))
+    if j.em_vertical:
+        losango(s,*tela(*j.lume.rect.center),5,AMBAR)
+    tx=desenho.right+16
+    passo=max(27,min(43,(r.h-26)//5))
+    for n,(ident,nome,dica,geo,cor) in enumerate(SALAS_MAPA):
+        aberto="viu_"+ident in vistos
+        atual=j.em_vertical and nome==j.setor_vertical
+        y=r.top+n*passo+1
+        texto(s,nome if aberto else "Trecho por descobrir",tx,y,16,
+              AMBAR if atual else PALIDO if aberto else (106,124,124),"forte" if atual else "normal")
+        if aberto and passo>=35:
+            texto(s,dica,tx,y+20,12,TEAL)
+    if r.h>=180:
+        texto(s,"Losango: passagem   ·   Círculo: marco",tx,r.bottom-22,12,OSSO)

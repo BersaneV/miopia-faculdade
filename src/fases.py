@@ -1,0 +1,347 @@
+"""Plantas laterais, pontos de interação e consequências dos quatro mecanismos."""
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+import pygame
+
+CHAO = 442
+# O arquivo salvo guarda o identificador do marco; sua posição vem da planta atual.
+MEIO = 1848
+VIGIA_X = 1980
+TRANCA_X = 2034
+ARENA = 3680
+FIM_ARENA = ARENA + 760
+RAIZ = FIM_ARENA + 110
+SAIDA = RAIZ + 120
+LARGURA = SAIDA + 50
+
+
+@dataclass(frozen=True)
+class Terreno:
+    rect: pygame.Rect
+    tipo: str
+
+    @property
+    def atravessavel(self):
+        return self.tipo in ("plataforma", "ponte", "apoio", "arena", "grade")
+
+    @property
+    def descida(self):
+        return self.tipo in ("plataforma", "apoio", "grade")
+
+
+@dataclass(frozen=True)
+class Objeto:
+    id: str
+    tipo: str
+    x: int
+    y: int
+    nome: str
+    # Objeto só aparece depois desta mudança. Itens marcados com seu próprio
+    # identificador somem; mecanismos permanecem visíveis após o uso.
+    requer: str = ""
+
+
+@dataclass(frozen=True)
+class Mecanismo:
+    requer: str
+    falta: str
+    efeito: str
+    audio: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Fase:
+    name: str
+    pisos: tuple[tuple[int, int], ...]
+    plataformas: tuple[tuple[int, int, int], ...]
+    tetos: tuple[tuple[int, int, int, int], ...]
+    objetos: tuple[Objeto, ...]
+    mecanismos: dict[str, Mecanismo]
+    preparo: str
+    passos: tuple[tuple[str, str], ...]
+    inimigos: tuple[tuple[str, int, int], ...]
+    orvalhos: tuple[tuple[int, int], ...]
+    registro: tuple[str, str]
+    fonte: str
+    width: int = LARGURA
+
+
+O = Objeto
+M = Mecanismo
+FASES = (
+    Fase(
+        "Bosque das Samambaias",
+        ((0, 1380), (1480, LARGURA)),
+        ((310, 376, 130), (481, 312, 174), (680, 248, 127), (985, 240, 220),
+         (1270, 372, 110)),
+        ((1160, 350, 110, 68),),
+        (O("nira", "npc", 224, CHAO, "Nira"), O("vespera", "npc", 778, 248, "Véspera"),
+         O("registro", "registro", 708, 248, "Mapa do berçário"),
+         O("valvula", "valvula", 568, 312, "Descer a corda"),
+         O("corda", "corda", 990, CHAO, "Subir pela corda", "valvula"),
+         O("peca", "peca", 1128, 240, "Retirar a peça de raiz")),
+        {"valvula": M("", "", "O carretel gira. Uma corda cai da forquilha adiante.", ("valvula", "corda")),
+         "peca": M("valvula", "A forquilha prende a peça. A válvula solta a amarra.",
+                   "A peça se encaixa. A corda conduz à forquilha dos ninhos.", ("coleta", "porta"))},
+        "peca", (("valvula", "Salte pelos galhos até a válvula"),
+                 ("peca", "Suba pela corda e retire a peça de raiz")),
+        (("morcego", 875, 344), ("morcego", 1548, 356)),
+        ((278, 417), (407, 350), (850, 415), (1145, 208), (1322, 346), (1680, 414)),
+        ("Mapa do berçário", "Nira riscou a data na seda. A trilha do berçário já tinha sumido duas luas antes do raio."),
+        "Uma peça de raiz mantém a arena aberta.",
+    ),
+    Fase(
+        "Córrego Fundo",
+        ((0, 1350), (1550, LARGURA)),
+        ((330, 374, 132), (500, 310, 154), (682, 245, 120)),
+        ((855, 322, 200, 96),),
+        (O("casca", "npc", 218, CHAO, "Casca"), O("fio", "npc", 1220, CHAO, "Fio"),
+         O("registro", "registro", 738, 245, "Nível antigo"),
+         O("dreno", "valvula", 432, 374, "Drenar o canal"),
+         O("lingueta", "peca", 982, CHAO, "Recolher a lingueta"),
+         O("ponte", "valvula", 1295, CHAO, "Soltar a ponte")),
+        {"dreno": M("", "", "A água desce. Sob a raiz, a corrente ainda corre para trás.", ("valvula", "agua")),
+         "lingueta": M("dreno", "O canal ainda cobre a lingueta.", "A lingueta de Casca cabe no segundo carretel.", ("coleta",)),
+         "ponte": M("lingueta", "Falta a lingueta. Ela ficou presa sob a raiz baixa.",
+                    "A ponte se estende. Por baixo, o ralo da segunda comporta ainda geme.", ("valvula", "corda", "porta"))},
+        "ponte", (("dreno", "Drene o canal na válvula elevada"), ("lingueta", "Deslize contra a corrente e recolha a lingueta"),
+                  ("ponte", "Solte a ponte com a segunda válvula")),
+        (("aranha", 1610, CHAO),),
+        ((285, 416), (418, 347), (740, 216), (805, 416), (1130, 415), (1668, 414)),
+        ("Nível antigo", "No fundo, dois sulcos de água. Um alimentava a borda; o outro, mais recente, dobra rumo à figueira."),
+        "O mecanismo de Casca permite chamar a cortina de água.",
+    ),
+    Fase(
+        "Taquaral",
+        ((0, 920), (1235, 1480), (1555, LARGURA)),
+        ((318, 377, 146), (508, 310, 154), (685, 243, 135), (1300, 375, 135)),
+        ((1618, 350, 115, 68),),
+        (O("eco", "npc", 245, CHAO, "Eco"), O("risca", "npc", 604, 310, "Risca"),
+         O("registro", "registro", 745, 243, "Pele de taquara"),
+         O("no", "no", 830, CHAO, "Acender o nó lateral"),
+         O("brasa", "brasa", 1370, 375, "Recolher a brasa de seiva")),
+        {"no": M("", "", "O brilho de Eco alcança três apoios no vão. As sombras encolhem.", ("raiz",)),
+         "brasa": M("no", "A fonte só amadurece sob o nó aceso.", "A brasa pulsa em sua casca. Além da ponte quebrada, há uma vagem seca.", ("coleta", "porta"))},
+        "brasa", (("no", "Acenda o nó de Eco à beira do vão"), ("brasa", "Salte pelos apoios e recolha a brasa")),
+        (("sombra", 1320, CHAO), ("morcego", 1620, 340)),
+        ((308, 416), (430, 349), (728, 215), (855, 415), (1290, 416), (1770, 413)),
+        ("Pele de taquara", "Na face voltada ao descampado, a taquara está seca. Na face de sombra há marcas de vaga-lume."),
+        "A brasa protegida responde à seiva do guardião.",
+    ),
+    Fase(
+        "Gruta da Figueira",
+        ((0, 1220), (1390, LARGURA)),
+        ((315, 377, 156), (508, 309, 152), (695, 245, 120), (980, 242, 218),
+         (1455, 372, 105)),
+        ((1580, 344, 130, 74),),
+        (O("no_memoria", "npc", 242, CHAO, "Nó"), O("pingo", "npc", 1450, CHAO, "Pingo"),
+         O("registro", "registro", 748, 245, "Cicatriz por dentro"),
+         O("roldana", "valvula", 580, 309, "Girar a roldana"),
+         O("corda", "corda", 988, CHAO, "Subir pela corda", "roldana"),
+         O("contrapeso", "sino", 1120, 242, "Soltar o contrapeso")),
+        {"roldana": M("", "", "A corda tomba ao lado do estrado. O sino ainda está preso acima.", ("valvula", "corda")),
+         "contrapeso": M("roldana", "A trava depende da roldana.", "O estrado pousa sobre o vão. O eco vem de outro sino, mais fundo.", ("corda", "porta"))},
+        "contrapeso", (("roldana", "Gire a roldana sobre as raízes"), ("contrapeso", "Suba a corda e solte o contrapeso")),
+        (("sombra", 1508, CHAO), ("aranha", 1750, CHAO)),
+        ((278, 416), (414, 349), (735, 217), (835, 415), (1144, 212), (1735, 413)),
+        ("Cicatriz por dentro", "A sombra acompanha os veios da árvore. Onde ninguém trouxe orvalho, a própria figueira escureceu."),
+        "O sino está ao alcance da guardiã.",
+    ),
+)
+
+# A segunda metade de cada mapa tem uma função própria. As grades de casca são
+# plataformas atravessáveis; paredes de escalada recebem o impulso lateral de Lume.
+@dataclass(frozen=True)
+class Ramal:
+    nome: str
+    pisos: tuple
+    pecas: tuple
+    objetivo: Objeto
+    reserva: tuple
+    gotas: tuple
+    inimigos: tuple
+    passo: str
+    efeito: str
+
+
+RAMAIS = (
+    Ramal("Forquilha dos ninhos",
+          ((1780, 2735), (2900, LARGURA)),
+          ((2130, -16, 34, 405, "parede"), (2264, 201, 44, 241, "parede"),
+           (2306, 205, 198, 15, "plataforma"), (2430, 291, 93, 15, "plataforma"),
+           (2510, 365, 94, 15, "plataforma"), (2650, 358, 80, 15, "plataforma"),
+           (3010, 369, 114, 15, "plataforma"), (3160, 307, 162, 15, "grade"),
+           (3325, 246, 120, 15, "plataforma")),
+          O("cunha", "peca", 2379, 205, "Soltar a cunha do berçário"),
+          (3392, 246), ((2195, 357), (2395, 177), (3082, 340)),
+          (("vespa", 1978, 336), ("carabideo", 3150, CHAO)),
+          "Suba a forquilha pelos dois troncos e solte a cunha",
+          "A cunha solta a casca presa no alto. O caminho dos ninhos alcança a arena."),
+    Ramal("Comporta de fundo",
+          ((1780, 2168), (2462, 2745), (2845, 3095), (3230, LARGURA)),
+          ((1970, 377, 133, 15, "plataforma"), (2115, 315, 84, 15, "plataforma"),
+           (2150, 315, 44, 155, "vedacao"), (2194, 315, 244, 15, "grade"),
+           (2167, 470, 309, 90, "chao"), (2194, 387, 68, 15, "plataforma"),
+           (2440, 315, 40, 155, "comporta"),
+           (2020, 235, 112, 15, "plataforma"), (2640, 374, 101, 15, "plataforma"),
+           (2805, 312, 110, 15, "grade"), (2990, 369, 110, 15, "plataforma"),
+           (3190, 354, 112, 15, "plataforma")),
+          O("ralo", "valvula", 2316, 470, "Destravar o ralo da comporta"),
+          (2070, 235), ((2006, 349), (2298, 439), (3030, 337)),
+          (("aranha", 2590, CHAO), ("vespa", 3280, 337)),
+          "Desça pela grade com baixo + Espaço e destrave o ralo",
+          "A folha de fundo sobe. Água e casulos voltam a passar pelo mesmo canal."),
+    Ramal("Ponte das sementes",
+          ((1780, 2500), (2845, 3120), (3240, LARGURA)),
+          ((2050, 371, 142, 15, "plataforma"), (2227, 300, 175, 15, "grade"),
+           (2400, 298, 100, 15, "plataforma"), (2890, 374, 115, 15, "plataforma"),
+           (3030, 307, 132, 15, "grade"), (3216, 358, 117, 15, "plataforma"),
+           (3380, 291, 120, 15, "plataforma")),
+          O("vagem", "peca", 2920, CHAO, "Colher a vagem da outra margem"),
+          (3400, 291), ((2210, 414), (2440, 270), (2880, 412)),
+          (("carabideo", VIGIA_X, CHAO), ("vespa", 3058, 338)),
+          "Plane do bambuzal quebrado até a vagem na outra margem",
+          "A vagem se abre ao calor. A raiz conduz o cheiro de volta a Eco."),
+    Ramal("Câmara da escuta",
+          ((1780, 2380), (2670, 3040), (3260, LARGURA)),
+          ((1982, 374, 122, 15, "plataforma"), (2141, 307, 136, 15, "plataforma"),
+           (2265, 237, 136, 15, "plataforma"), (2370, 237, 40, 232, "parede"),
+           (2410, 237, 252, 15, "grade"), (2370, 469, 320, 95, "chao"),
+           (2410, 384, 74, 15, "plataforma"), (2434, 306, 70, 15, "plataforma"),
+           (2658, 237, 46, 232, "comporta"), (2820, 370, 115, 15, "plataforma"),
+           (2950, 315, 91, 15, "plataforma"), (3160, 357, 72, 15, "plataforma"),
+           (3340, 353, 120, 15, "plataforma")),
+          O("eco_antigo", "sino", 2530, 469, "Ouvir o sino soterrado"),
+          (2310, 237), ((2020, 346), (2500, 440), (2858, 340)),
+          (("vespa", 2090, 334), ("sombra", 2870, CHAO), ("carabideo", 3415, CHAO)),
+          "Na câmara, desça pela grade para tocar o sino soterrado",
+          "O sino devolve três batidas. Por baixo da figueira, a guardiã responde."),
+)
+
+
+def ampliar(fase, ramal):
+    objeto = ramal.objetivo
+    pendencia = "Falta preparar o primeiro trecho. " + fase.passos[-1][1] + "."
+    mecanismo = M(fase.preparo, pendencia, ramal.efeito, ("raiz", "porta"))
+    return replace(fase,
+        pisos=tuple((a, min(b,1780)) for a,b in fase.pisos if a<1780) + ramal.pisos,
+        objetos=fase.objetos + (objeto, O("reserva","reserva",*ramal.reserva,"Abrir a bolsa de trilha")),
+        mecanismos={**fase.mecanismos, objeto.id:mecanismo},
+        preparo=objeto.id, passos=fase.passos+((objeto.id,ramal.passo),),
+        inimigos=fase.inimigos+ramal.inimigos, orvalhos=fase.orvalhos+ramal.gotas)
+
+
+FASES = tuple(ampliar(fase, ramal) for fase,ramal in zip(FASES,RAMAIS))
+
+# Vozes mudam com o mecanismo local e com a restauração da mata.
+FALAS = {
+    "Nira": ("Apaguei dois caminhos do meu mapa antes da tempestade. Véspera ainda canta lá em cima.",
+             "A corda desceu. O galho alto guarda a peça da porteira.",
+             "Agora posso redesenhar a trilha até o berçário. Vou deixar os ninhos vazios no mapa."),
+    "Véspera": ("Canto três vezes. O eco responde do galho à minha esquerda. Havia ninhos ali.",
+                "Quando o morcego dobrar as asas, procure os riscos na parede. Ele não consegue frear.",
+                "Hoje, entre um canto e outro, ouvi alguém voltar."),
+    "Casca": ("Fechei a comporta quando Brasa pediu. Não contei a Fio por que o canal secou.",
+              "A corrente empurra quem anda devagar. Use o deslize sob a raiz, a lingueta está na outra margem.",
+              "Ainda tenho a chave. Desta vez vou deixá-la ao alcance de Fio."),
+    "Fio": ("Remendo as teias por cima, onde a corrente não leva a seda.",
+            "A Tecelã desce quando a cortina de água corta seus fios. A lingueta serve nas duas válvulas.",
+            "Casca voltou com água. Ainda vai levar tempo para o canal encher."),
+    "Eco": ("Quando eu piscar, olhe para a borda do vão. Ficou um nó de luz lá embaixo.",
+            "O guardião dormia sob os bambus. Leve a brasa protegida; ele sente o calor pela casca.",
+            "Ouvi Risca chamar. Pela primeira vez a resposta chegou ao outro lado."),
+    "Risca": ("Vi olhos nas taquaras. Talvez a Coruja tenha vindo antes da tempestade.",
+              "Eco reconheceu as luzes. Eram os que ficaram para trás, não os olhos da guardiã.",
+              "Ainda olho duas vezes. Agora há um caminho para ir conferir."),
+    "Nó": ("Guardo o que passou por estas raízes. Nem toda lembrança chegou inteira.",
+           "O sino e a parede falam mais alto que os passos. A guardiã precisa ouvir um caminho de volta.",
+           "A sombra continua em nós. O orvalho pode circular mesmo assim."),
+    "Pingo": ("Mimo procura um casulo seco. Levarei seu recado pela trilha da borda.",
+              "A porta se moveu. Já posso atravessar de novo com os recados.",
+              "Levei as notícias a Candeia. De longe já dava para ver o refúgio."),
+    "Brasa": ("Mandei juntar o orvalho no centro. Eu conseguia ver os pequenos dali.",
+              "Nira diz que os galhos das bordas já secavam. Nunca fui até lá para olhar.",
+              "Amanhã vou levar a primeira gota até o berçário."),
+    "Mimo": ("Dois casulos, uma folha seca. Fique um instante; posso reacender sua luz.",
+             "Pingo encontrou um teto para quem estava no córrego. Falta abrir o caminho.",
+             "Temos outra folha seca. Já cabe mais alguém."),
+    "Candeia": ("Estou contando as luzes. Daqui só vejo a do centro.",
+                "Uma veia já pulsa longe do abrigo. É assim que os perdidos acham a volta.",
+                "Deixei uma trilha em cada raiz. Agora também se vê a mata daqui."),
+    "Coruja": ("Ouvi a madeira fechar muito antes do raio. Julguei que fosse só o vento.",
+               "Ouvi a madeira fechar muito antes do raio. Julguei que fosse só o vento.",
+               "Consigo ouvir as bordas outra vez. Que a luz chegue também a elas."),
+}
+
+
+def terrenos(indice, flags):
+    fase = FASES[indice]
+    out = []
+    def add(x, y, w, h, tipo):
+        out.append(Terreno(pygame.Rect(x, y, w, h), tipo))
+
+    for left, right in fase.pisos:
+        add(left, CHAO, right - left, 128, "chao")
+    for x, y, w in fase.plataformas:
+        add(x, y, w, 16, "plataforma")
+    for x, y, w, h in fase.tetos:
+        add(x, y, w, h, "teto")
+    if indice == 1:
+        # O tampão fecha apenas a boca do canal. A lingueta fica deitada sob
+        # a raiz, alcançável de ambas as margens pela passagem de 24 px.
+        if "dreno" not in flags:
+            add(853, CHAO-24, 30, 24, "vedacao")
+        if "ponte" in flags:
+            add(1345, CHAO, 210, 18, "ponte")
+    if indice == 2 and "no" in flags:
+        for x, y in ((944, 405), (1045, 354), (1150, 396)):
+            add(x, y, 80, 15, "apoio")
+    if indice == 3 and "contrapeso" in flags:
+        add(1214, CHAO, 182, 16, "ponte")
+    for x,y,w,h,tipo in RAMAIS[indice].pecas:
+        if tipo=="comporta":
+            if fase.preparo in flags:
+                continue
+            tipo="vedacao"
+        add(x,y,w,h,tipo)
+    if fase.preparo not in flags:
+        add(ARENA-50, 65, 38, CHAO-65, "porta")
+    if "chefe" not in flags:
+        add(FIM_ARENA, 78, 26, CHAO - 78, "porta")
+    return out
+
+# A topologia e os mecanismos não variam no Infinito. Estes pontos foram
+# escolhidos em chão firme ou sobre um apoio alcançável dos mapas de campanha.
+VIGILIAS = (("morcego", "Vigília das asas"), ("aranha", "Travessia dos fios"), ("sombra", "Rastro do Breu"))
+POUSOS = ((1585, 712, 895), (1632, 642, 1168), (1590, 645, 1285), (1495, 635, 1744))
+ORVALHO_ALTO = ((742, 221), (742, 218), (752, 217), (743, 216))
+# O quinto ponto de coleta alterna entre galho alto e pequeno desvio no solo.
+GOTAS_VARIANTES = (((1322, 346), (1575, 417)), ((616, 285), (1210, 416)),
+                   ((1388, 348), (1610, 416)), ((1509, 346), (1420, 417)))
+
+
+def montar_infinito(indice, volta):
+    """A mesma volta no mesmo bioma é reproduzível em visitas e recargas."""
+    fase = FASES[indice]
+    tipo, nome = VIGILIAS[(indice + volta) % len(VIGILIAS)]
+    quantidade = min(3, 1 + volta)
+    inimigos = []
+    for n, x in enumerate(POUSOS[indice][:quantidade]):
+        especie = tipo if n < 2 else VIGILIAS[(indice + volta + 1) % len(VIGILIAS)][0]
+        # Deslocamentos limitados preservam margem antes de teto e poço.
+        x += (-12, 0, 12, 6)[(volta + n + indice) % 4]
+        inimigos.append((especie, x, CHAO - 84 if especie == "morcego" else CHAO))
+    gotas = list(fase.orvalhos)
+    gotas[4] = GOTAS_VARIANTES[indice][(volta + indice) % 2]
+    deslocamentos = (-12, 10, -5, 15, 0)
+    gotas = [(x + deslocamentos[(volta + indice + n) % len(deslocamentos)], y)
+             for n, (x, y) in enumerate(gotas)]
+    # O ramal também é patrulhado. A geometria crítica do salto fica livre;
+    # espécies de emboscada esperam na margem ou no próximo patamar.
+    for especie, x, y in RAMAIS[indice].inimigos[:min(1+volta, 2)]:
+        inimigos.append((especie,x+12*(volta%2),y))
+    alto = ORVALHO_ALTO[indice]
+    # A gota dourada ocupa o ramo opcional, sem se sobrepor à gota comum.
+    gotas = [p for p in gotas if abs(p[0] - alto[0]) > 26 or abs(p[1] - alto[1]) > 30]
+    return nome, inimigos, gotas, alto

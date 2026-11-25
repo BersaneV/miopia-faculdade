@@ -1,0 +1,419 @@
+"""Cenário distante, terreno sólido, criaturas, luz de Lume e HUD."""
+import math
+import random
+import unicodedata
+from functools import lru_cache
+import pygame
+from .arte_arena import sinais_encontro
+from .arte_combate import inimigo, projeteis, golpe_lume, tranca
+from .ilustracao import (original, AMBAR, OSSO, PALIDO, PERIGO, ROMANOS, TEAL, TINTA, brilho, imagem,
+                         losango, painel, placa, sprite, texto)
+
+CORES = ((77,102,86),(81,119,119),(127,116,72),(97,86,106))
+POSES = {"pulo":4, "queda":5, "agachar":6, "deslize":7, "dano":8,
+         "golpe":9, "clarao":10, "corda":11, "parede":11, "planar":5}
+OBJETOS = {"orvalho":("orvalho",21,31), "valvula":("valvula",51,65), "corda":("corda",38,118),
+           "peca":("peca",40,30), "no":("raiz",60,52), "brasa":("raiz",40,48),
+           "sino":("sino",42,66), "raiz":("raiz",88,91), "registro":("registro",36,26),
+           "refugio":("refugio",98,86), "atalho":("porta",61,65),
+           "reserva":("registro",38,27)}
+NPC_TAM = {"Nira":(61,65),"Casca":(74,60),"Eco":(48,40),"Brasa":(58,52),
+           "Mimo":(56,48),"Candeia":(48,40),"Véspera":(58,47),"Fio":(69,43),
+           "Risca":(81,48),"Pingo":(56,42),"Nó":(75,55),"Coruja":(77,96)}
+
+
+def slug(s):
+    return unicodedata.normalize("NFKD",s.lower()).encode("ascii","ignore").decode()
+
+
+@lru_cache(maxsize=4)
+def fundo(i):
+    img=imagem(f"fundo_{i}.jpg",1270,714).copy()
+    img.fill((158,174,182),special_flags=pygame.BLEND_RGB_MULT)
+    return img
+
+
+@lru_cache(maxsize=4)
+def margens(i):
+    """Ramos do primeiro plano passam em outra velocidade que o piso."""
+    rng=random.Random(35+i)
+    surf=pygame.Surface((1200,140),pygame.SRCALPHA)
+    for x in range(-15,1200,47):
+        h=rng.randrange(14,61)
+        if i==2:
+            pygame.draw.line(surf,(15,24,23,225),(x,140),(x+20,140-h),4)
+            pygame.draw.polygon(surf,(24,34,29,220),[(x+12,118),(x-16,98),(x+7,120)])
+        else:
+            folha=imagem("obj_folha.png",h*2,h+12,x%2==0).copy()
+            folha.fill((30,42,45,210),special_flags=pygame.BLEND_RGBA_MULT)
+            surf.blit(folha,(x,139-h))
+    return surf
+
+
+SOMBRAS = ((19, 25, 37), (33, 42, 53), (55, 65, 78), (79, 88, 98))
+
+
+@lru_cache(maxsize=80)
+def mascara_luz(raio, brilho_mata):
+    r = max(4, raio)
+    tom = SOMBRAS[brilho_mata]
+    surf = pygame.Surface((r*2, r*2))
+    surf.fill(tom)
+    for n in range(r, 0, -2):
+        v = min(1., (1 - n / r) * 1.8)
+        v = v*v*(3-2*v)
+        cor = tuple(round(c+(255-c)*v) for c in tom)
+        pygame.draw.circle(surf, cor, (r,r), n)
+    return surf
+
+
+@lru_cache(maxsize=80)
+def rocha_lateral(w, h, tipo, semente):
+    # A largura visual acompanha a face que recebe a colisão.
+    rng = random.Random(semente + h*5 + w)
+    surf = pygame.Surface((w+10,h+4),pygame.SRCALPHA)
+    esq = [(rng.randrange(1,6),y) for y in range(0,h,16)] + [(4,h)]
+    direita = [(w+rng.randrange(1,6),y) for y in range(0,h,16)] + [(w+5,h)]
+    pygame.draw.polygon(surf,(48,52,53),esq + list(reversed(direita)))
+    pygame.draw.lines(surf,(105,119,113),False,esq,2)
+    pygame.draw.lines(surf,(95,94,83),False,direita,2)
+    for y in range(9,h-5,13):
+        x = rng.randint(4,max(4,w//2))
+        pygame.draw.lines(surf,(77,79,75),False,[(4,y+2),(x,y-3),(w,y+4)],2)
+        if tipo == "parede" and y%3 != 0:
+            # Cicatrizes claras nas duas faces são a linguagem visual de impulso.
+            pygame.draw.line(surf,(186,168,114),(3,y+4),(min(w,12),y-3),2)
+            pygame.draw.line(surf,(186,168,114),(w-8,y+6),(w+2,y-2),2)
+    return surf
+
+
+@lru_cache(maxsize=16)
+def rocha_de_fundo(bioma, h):
+    apoio=imagem("beiral_3.png",h+48,int(h*.76),True).copy()
+    apoio.fill((107,128,119,255),special_flags=pygame.BLEND_RGBA_MULT)
+    return apoio
+
+
+def grade(s,r):
+    pygame.draw.line(s,(166,158,117),r.topleft,r.topright,2)
+    pygame.draw.line(s,(102,105,84),(r.left,r.top+8),(r.right,r.top+8),2)
+    for x in range(r.left+3,r.right-7,9):
+        pygame.draw.line(s,(147,147,110),(x,r.top+1),(x+7,r.top+8),1)
+        pygame.draw.line(s,(85,93,80),(x,r.top+8),(x+7,r.top+1),1)
+
+
+def terreno(s,t,camera,i):
+    r=t.rect.move(-round(camera),0)
+    if r.right<0 or r.left>960 or t.tipo=="arena": return
+    cor=CORES[i]
+    if t.tipo=="tranca":
+        tranca(s,r)
+        return
+    if t.tipo in ("vedacao","parede"):
+        s.blit(rocha_lateral(r.w,r.h,t.tipo,t.rect.x),(r.x-4,r.y))
+        return
+    if t.tipo=="grade":
+        grade(s,r)
+        if r.w>40:
+            pygame.draw.lines(s,(188,186,143),False,[(r.centerx-5,r.top+12),(r.centerx,r.top+16),(r.centerx+5,r.top+12)],2)
+        return
+    if t.tipo=="porta":
+        rng=random.Random(t.rect.x)
+        # As raízes de uma comporta descem do dossel e se entrelaçam no chão.
+        for n in range(5):
+            x=r.left+3+n*max(2,(r.w-6)//4)
+            fase=rng.random()*6
+            pts=[(x+math.sin(y*.032+fase)*4,y) for y in range(-18,r.bottom+2,9)]
+            pygame.draw.lines(s,(53,41,37),False,pts,5)
+            pygame.draw.lines(s,(149,115,79),False,pts,1)
+        pygame.draw.line(s,(172,141,89),(r.left-2,r.bottom-41),(r.right+3,r.bottom-45),3)
+        return
+    if t.tipo=="teto":
+        # A raiz se apoia na margem de trás. A abertura abaixo permanece legível.
+        im=imagem(f"beiral_{i}.png",r.w+12,r.h)
+        x,y=r.left,r.bottom
+        apoio=rocha_de_fundo(i,r.h)
+        s.blit(apoio,(x-apoio.get_width()//2,y-apoio.get_height()+7))
+        s.blit(im,(r.left-3,r.top))
+        for n in range(3):
+            px=r.left+14+n*12
+            pygame.draw.aaline(s,(157,148,115),(px,y-3),(px+7,y-4))
+        return
+    pisos=("chao","galho","bambu","pedra")
+    tile=pisos[i] if t.tipo in ("chao","plataforma") else "bambu"
+    if t.tipo=="chao":
+        pygame.draw.rect(s,(24,32,32),r)
+        # The same top texture joins continuously over a filled soil cross section.
+        passo=157
+        start=max(0,(-r.left)//passo)
+        for n in range(start,min((r.w+passo-1)//passo,start+8)):
+            x=r.left+n*passo
+            w=min(passo,r.right-x)
+            s.blit(faixa_solo(tile,n%2),(x,r.top),(0,0,w,50))
+        for n in range(max(0,(-r.left)//88-1),min((r.w-24)//88+1,max(0,(-r.left)//88)+14)):
+            x=r.left+20+n*88+int(math.sin(n*7.1+i)*29)
+            if n%4!=2:
+                h=12+int(abs(math.sin(n*4.6+i))*19)
+                sprite(s,"obj_folha",x,r.top+1,h*2,h,n%2==1)
+    else:
+        im=imagem("obj_"+tile+".png",r.w,29)
+        s.blit(im,(r.x,r.y-4))
+    pygame.draw.line(s,tuple(min(225,v+58) for v in cor),r.topleft,r.topright,2)
+    if t.descida and t.tipo!="grade":
+        x=r.centerx
+        pygame.draw.lines(s,(169,173,139),False,[(x-4,r.top+5),(x,r.top+8),(x+4,r.top+5)],1)
+
+
+@lru_cache(maxsize=8)
+def faixa_solo(tile,espelho):
+    im=original("obj_"+tile+".png")
+    parte=im.subsurface((im.get_width()//4,im.get_height()//5,
+                         im.get_width()//2,im.get_height()*3//5))
+    faixa=pygame.transform.smoothscale(parte,(157,50))
+    return pygame.transform.flip(faixa,espelho,False)
+
+
+def rotina(s,nome,x,y,t):
+    f=(t*1.18)%1
+    if nome in ("Nira","Brasa"):
+        pygame.draw.line(s,(190,162,107),(x-20,y-6),(x-27+f*9,y-12),1)
+    elif nome in ("Véspera","Coruja"):
+        r=4+int(f*10)
+        pygame.draw.arc(s,TEAL,(x-24-r,y-29-r,r*2,r*2),2.1,4.1,1)
+    elif nome in ("Mimo","Casca","Pingo"):
+        pygame.draw.circle(s,(173,183,135),(int(x-21+f*7),int(y-7-math.sin(f*math.pi)*3)),2)
+    elif nome=="Fio":
+        for n in range(3):
+            pygame.draw.aaline(s,PALIDO,(x-17,y-11),(x-38,y-10-n*5+math.sin(t+n)*2))
+    else:
+        brilho(s,(x+math.sin(t)*7,y-12),14+round(3*math.sin(t*3)))
+
+
+def mata_reacesa(s,j,cx,t):
+    # Nectar attracts three small carriers to each restored section.
+    for n in range(15):
+        x=(37+n*209+math.sin(t*.8+n)*22)-cx
+        if -30<x<990:
+            y=421-math.sin(t*1.7+n*4)*17-(n%3)*6
+            brilho(s,(x,y),14)
+            pygame.draw.circle(s,(195,196,113),(int(x),int(y)),2)
+            pygame.draw.aaline(s,TEAL,(x,y-2),(x+4,y-4-math.sin(t*10)*2))
+
+
+
+def objeto(s,o,j,cx,tempo):
+    x=o.x-cx
+    if not -105<x<1065: return
+    if o.tipo=="fenda":
+        y=o.y
+        pygame.draw.ellipse(s,(12,20,24),(x-40,y-63,80,68))
+        for lado in (-1,1):
+            pygame.draw.lines(s,(90,96,76),False,[(x+lado*40,y),(x+lado*33,y-32),(x+lado*17,y-54),(x,y-62)],4)
+        brilho(s,(x,y-31),19)
+        pygame.draw.lines(s,AMBAR,False,[(x-6,y-40),(x,y-46),(x+6,y-40)],2)
+        pygame.draw.lines(s,PALIDO,False,[(x-6,y-26),(x,y-20),(x+6,y-26)],2)
+        return
+    if o.tipo=="npc":
+        w,h=NPC_TAM[o.nome]
+        ond=math.sin(tempo*2+o.x)*1.6
+        if o.nome in ("Eco","Pingo","Candeia"): ond-=4
+        sprite(s,"npc_"+slug(o.nome),x,o.y+ond,w,h+round(ond/2))
+        rotina(s,o.nome,x,o.y+ond,tempo)
+        if abs(o.x-j.lume.rect.centerx)<135:
+            texto(s,o.nome,x,o.y-h-24,14,OSSO,"forte","centerx")
+        return
+    if o.tipo in ("saida","voltar"):
+        d = 1 if o.tipo=="saida" else -1
+        pygame.draw.line(s,(115,102,79),(x-10,o.y),(x-10,o.y-34),3)
+        pygame.draw.lines(s,AMBAR,False,[(x-5*d,o.y-19),(x+6*d,o.y-25),(x-5*d,o.y-30)],2)
+        brilho(s,(x-10,o.y-34),17)
+        losango(s,x-10,o.y-34,3)
+        return
+    arte,w,h=OBJETOS[o.tipo]
+    if o.tipo=="corda":
+        pygame.draw.line(s,(162,134,91),(x,216),(x,o.y-65),3)
+        for y in range(219,o.y-64,9): pygame.draw.line(s,(92,75,56),(x-2,y),(x+2,y+3))
+    y=o.y
+    if o.id=="lingueta":
+        w,h=30,14
+    if o.tipo=="reserva":
+        especie=("casulo","balsamo","pavio","casulo")[j.etapa]
+        brilho(s,(x,y-12),22)
+        sprite(s,"item_"+especie,x,y,32,27)
+        return
+    if o.tipo=="orvalho":
+        y+=h//2+round(3*math.sin(tempo*3+o.x))
+        brilho(s,(x,y-h//2),25)
+    if o.tipo=="raiz" and "raiz" in j.flags or o.tipo=="no" and o.id in j.flags:
+        brilho(s,(x,y-25),85)
+        for n in range(6):
+            pygame.draw.circle(s,(199,209,148),(int(x+math.sin(tempo+n)*44),int(y-16-((tempo*15+n*13)%55))),2)
+    sprite(s,"obj_"+arte,x,y,w,h)
+    if o.id=="gota_minuto":
+        cy=round(y-h//2)
+        pygame.draw.circle(s,AMBAR,(round(x),cy),16,1)
+        pygame.draw.lines(s,OSSO,False,[(x,cy-9),(x,cy),(x+5,cy+3)],2)
+
+
+def lume(s,l,cx,t):
+    pos=l.pose
+    fr=POSES.get(pos,0)
+    if pos in ("andar","correr"):
+        fr=(1,2,3,2)[int(t*(11 if pos=="correr" else 7))%4]
+    w=58 if pos!="deslize" else 68
+    h={"agachar":22,"deslize":19,"pulo":43,"queda":41,"corda":43,"golpe":34}.get(pos,32)
+    x=l.rect.centerx-cx
+    y=l.rect.bottom
+    brilho(s,(x-12*l.face,y-h*.44),55)
+    golpe_lume(s,l,cx)
+    if l.iframes<=0 or int(t*14)%3!=1:
+        sprite(s,f"lume_{fr}",x,y+1,w,h,l.face<0)
+    if l.slide>0:
+        for n in range(4):
+            pygame.draw.line(s,AMBAR,(x-l.face*(17+n*8),y-4-n),(x-l.face*(24+n*9),y-4-n),1)
+
+
+class Paisagem:
+    def __init__(self):
+        self.luz=pygame.Surface((960,540))
+        self.brilho_mata=1
+        self.particulas=[]
+        self.ultimo_tempo=None
+        self.ultimo_jogo=None
+        self.lampejos=()
+
+    def ecos(self,s,j,cx):
+        # Datas pertencem ao relógio da partida; abrir o diário congela as partículas.
+        if j is not self.ultimo_jogo or (self.ultimo_tempo is not None and j.tempo<self.ultimo_tempo):
+            self.particulas.clear()
+            self.ultimo_tempo=None
+            self.ultimo_jogo=j
+            self.lampejos=()
+        if self.ultimo_tempo!=j.tempo:
+            self.ultimo_tempo=j.tempo
+            if "resposta_eco" in j.eventos:
+                self.lampejos=(j.tempo, 1124, 329)
+            paleta={"coleta":AMBAR,"raiz":(160,225,160),"acerto":(229,206,160),
+                    "dano":PERIGO,"pouso":(124,147,131),"porta":(194,170,123)}
+            for ev in set(j.eventos)&paleta.keys():
+                quantidade=5 if ev=="pouso" else 13
+                for n in range(quantidade):
+                    a=n*2.4
+                    vel=20+(n*17)%53
+                    self.particulas.append((j.tempo,j.lume.rect.centerx,j.lume.rect.bottom-12,
+                                            math.cos(a)*vel,-15-abs(math.sin(a))*vel,paleta[ev]))
+        if self.lampejos:
+            data,x,y=self.lampejos
+            idade=j.tempo-data
+            for t0 in (.23, .85):
+                if t0 <= idade < t0+.33:
+                    intensidade=math.sin((idade-t0)/.33*math.pi)
+                    brilho(s,(x-cx,y),round(19+40*intensidade))
+                    losango(s,round(x-cx),y,round(1+4*intensidade),(218,229,147))
+            if idade>1.4:
+                self.lampejos=()
+        self.particulas=[p for p in self.particulas if 0<=j.tempo-p[0]<.62]
+        for inicio,x,y,vx,vy,cor in self.particulas:
+            d=j.tempo-inicio
+            px,py=x-cx+vx*d,y+vy*d+73*d*d
+            pygame.draw.line(s,cor,(round(px),round(py)),(round(px-vx*.025),round(py-vy*.025)),2)
+
+    def desenhar(self,s,j,t):
+        if j.em_vertical:
+            from .corte_vertical import desenhar_vertical
+            desenhar_vertical(s,j,t,self.brilho_mata)
+            return
+        i,cx=j.etapa,j.camera
+        s.blit(fundo(i),(-int(cx/(j.fase.width-960)*310),-108))
+        for n in range(28):
+            x=(n*97-cx*.31+math.sin(n+t*.31)*10)%980-10
+            y=70+(n*47+t*(2+n%3))%365
+            pygame.draw.circle(s,(146,163,142),(int(x),int(y)),1)
+        if i==1:
+            nivel=423 if "dreno" in j.flags else 353
+            left,right=round(802-cx),round(1349-cx)
+            water=placa(547,442-nivel,130).copy()
+            water.fill((52,110,117,110))
+            s.blit(water,(left,nivel))
+            for n in range(4):
+                y=nivel+n*10
+                pygame.draw.lines(s,(108,154,145),False,[(left+k,y+math.sin(k*.07+t*2)*2) for k in range(0,right-left+1,10)],1)
+        for tr in j.solidos: terreno(s,tr,cx,i)
+        for o in j.objetos: objeto(s,o,j,cx,t)
+        if "raiz" in j.flags or "no" in j.flags: mata_reacesa(s,j,cx,t)
+        for e in j.inimigos:
+            if j.visivel(e.rect.center,18):
+                inimigo(s,e,cx,j.lume,t)
+        if j.boss:
+            j.boss.desenhar(s,cx)
+        self.luz.fill(SOMBRAS[self.brilho_mata])
+        fontes = [(j.lume.rect.centerx,j.lume.rect.centery,j.raio)]
+        fontes.extend((v.x,v.y,v.raio(j.tempo)) for v in j.vestigios)
+        for x,y,raio in fontes:
+            r=round(raio/4)*4
+            if r<4 or x+r<cx or x-r>cx+960:
+                continue
+            self.luz.blit(mascara_luz(r,self.brilho_mata),(round(x-cx)-r,round(y)-r),
+                          special_flags=pygame.BLEND_RGB_MAX)
+        s.blit(self.luz,(0,0),special_flags=pygame.BLEND_RGB_MULT)
+        for v in j.vestigios:
+            if v.raio(j.tempo)>16:
+                xy=(round(v.x-cx),round(v.y))
+                idade = j.tempo-v.inicio
+                if idade<.32:
+                    r=max(5,v.raio(j.tempo))
+                    area=pygame.Rect(xy[0]-r,xy[1]-r,r*2,r*2)
+                    cor=(163,144,107)
+                    pygame.draw.arc(s,cor,area,.14,1.54)
+                    pygame.draw.arc(s,cor,area,3.68,5.11)
+                brilho(s,xy,min(27,v.raio(j.tempo)//2))
+                losango(s,*xy,3,AMBAR,False)
+        for e in j.inimigos:
+            projeteis(s,e,cx,j.lume,j.raio,j.visivel)
+        if j.boss: sinais_encontro(s,j.boss,cx)
+        lume(s,j.lume,cx,t)
+        self.ecos(s,j,cx)
+        desloc=int(cx*1.16)%1200
+        for x in (-desloc,1200-desloc): s.blit(margens(i),(x,414))
+
+
+def hud(s,j):
+    painel(s,(19,18,213,64))
+    texto(s,"LUZ",33,23,12,AMBAR,"forte")
+    texto(s,f"{max(0,round(j.lume.energia)):02d}",217,20,20,OSSO,"titulo","right")
+    pygame.draw.rect(s,(50,62,62),(33,49,184,5))
+    pygame.draw.rect(s,AMBAR,(33,49,round(184*max(0,min(100,j.lume.energia))/100),5))
+    for n in range(j.vidas_iniciais): losango(s,38+n*13,67,3,AMBAR,n<j.lume.vidas)
+    texto(s,f"Orvalho  {min(j.orvalhos,3)} / 3",217,57,14,PALIDO,"normal","right")
+    painel(s,(682,18,259,64))
+    texto(s,("TRAVESSIA   "+ROMANOS[j.etapa]) if j.modo=="historia" else
+          f"INFINITO   {j.volta*4+j.etapa+1}   ·   {max(0,int(j.tempo_restante))} s",925,24,12,AMBAR,"forte","right")
+    texto(s,j.setor_vertical if j.em_vertical else j.fase.name,925,44,20,OSSO,"titulo","right")
+    item=j.bolsa.item
+    qtd="ferramenta" if item.permanente and j.bolsa.quantidade else str(j.bolsa.quantidade)
+    painel(s,(19,86,213,32),False)
+    sprite(s,"item_"+item.id,38,115,24,24)
+    texto(s,f"{item.nome}  ·  {qtd}",57,88,13,PALIDO,"forte")
+    texto(s,"Q  trocar   F  usar",57,104,11,PALIDO)
+
+    if j.boss and not j.boss.vencido:
+        painel(s,(258,17,402,64))
+        texto(s,j.boss.nome,459,22,23,OSSO,"titulo","centerx")
+        for n in range(j.boss.meta): losango(s,453+n*14,63,4,AMBAR,n<j.boss.progresso)
+    if j.interacao and not j.dialogo:
+        msg="E   "+j.interacao
+        cx=max(165,min(795,j.lume.rect.centerx-j.camera))
+        y=max(122,min(365,j.lume.rect.top-j.camera_y-62))
+        for teto in (() if j.em_vertical else j.fase.tetos):
+            x_teto,y_teto,largura,altura=teto
+            if x_teto-16 < j.lume.rect.centerx < x_teto+largura+16 and j.lume.rect.top >= y_teto+altura-3:
+                y=min(y,y_teto-31)
+        w=max(110,len(msg)*8+22)
+        painel(s,(cx-w//2,y,w,27))
+        texto(s,msg,cx,y+3,15,OSSO,"forte","centerx")
+    if j.dialogo: return
+    s.blit(placa(960,52,225),(0,488))
+    texto(s,"DIÁRIO  [TAB]",937,505,13,PALIDO,"forte","right")
+    texto(s,j.objetivo,22,491,17,OSSO,"forte")
+    info=j.aviso if j.aviso_t>0 and j.aviso!=j.fase.name else j.dica_local
+    texto(s,info,22,516,14,PALIDO)
