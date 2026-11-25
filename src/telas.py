@@ -254,10 +254,12 @@ def pagina_mapa(a,s,corte=False):
     from .mapa_visor import contexto,QUADRO
     from .missoes import rastreada
     j=contexto(a.jogo,corte);v=a.mapa_visor;v.preparar(j)
-    for n,l in enumerate(linhas(a.jogo.objetivo,780,17,'forte')[:2]):
+    ensaio=ENSAIOS[a.ensaio] if getattr(a,'ensaio',None) is not None else None
+    titulo='Campo de testes · '+ensaio.nome if ensaio else a.jogo.objetivo
+    for n,l in enumerate(linhas(titulo,780,17,'forte')[:2]):
         texto(s,l,480,132+n*21,17,OSSO,'forte','centerx')
     alvo=alvo_local(j)
-    detalhe=alvo.detalhe if alvo else 'Explore as trilhas e marque os lugares a que deseja voltar.'
+    detalhe=ensaio.pista if ensaio else alvo.detalhe if alvo else 'Explore as trilhas e marque os lugares a que deseja voltar.'
     if getattr(a.jogo,'ensino_ate',0)>a.jogo.tempo:detalhe=getattr(a.jogo,'ensino_detalhe',detalhe)
     if getattr(j,'_mapa_sem_lume',False):detalhe='Consulta do Corte · C centraliza no último marco; Lume está na superfície.'
     if a.mapa_aviso_ate>a.relogio:detalhe=a.mapa_aviso

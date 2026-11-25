@@ -2,6 +2,17 @@
 import pygame
 from .ilustracao import painel,texto,linhas,AMBAR,PALIDO
 
+MAX_LINHAS=5
+
+
+def linhas_corpo(msg):
+    corpo=linhas(msg,238,13)
+    if len(corpo)>MAX_LINHAS:
+        from .cartografia import texto_curto
+        restante=corpo[MAX_LINHAS-1]+'…'
+        corpo=corpo[:MAX_LINHAS-1]+[texto_curto(restante,238,13)]
+    return corpo
+
 
 def caixa(j,altura=126):
     jogador=j.lume.rect.move(-j.camera,-j.camera_y).inflate(28,28)
@@ -21,7 +32,7 @@ def conteudo(j):
 
 
 def altura(msg,interacao):
-    return 38+min(4,len(linhas(msg,238,13)))*17+(24 if interacao else 0)
+    return 38+len(linhas_corpo(msg))*17+(24 if interacao else 0)
 
 
 def ocupa_esquerda(j):
@@ -35,7 +46,7 @@ def desenhar(s,j):
     aviso=conteudo(j);interacao=j.interacao
     if aviso is None and not interacao:return
     titulo,msg=aviso if aviso else ('Perto de Lume','')
-    corpo=linhas(msg,238,13)[:4]
+    corpo=linhas_corpo(msg)
     r=caixa(j,altura(msg,interacao));painel(s,r,False)
     texto(s,titulo,r.x+12,r.y+8,14,AMBAR,'forte')
     for n,l in enumerate(corpo):texto(s,l,r.x+12,r.y+32+n*17,13,PALIDO)
