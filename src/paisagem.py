@@ -458,10 +458,6 @@ def objeto(s,o,j,cx,tempo):
         for n in range(6):
             pygame.draw.circle(s,(199,209,148),(int(x+math.sin(tempo+n)*44),int(y-16-((tempo*15+n*13)%55))),2)
     sprite(s,"obj_"+arte,x,y,w,h)
-    if o.id=="gota_minuto":
-        cy=round(y-h//2)
-        pygame.draw.circle(s,AMBAR,(round(x),cy),16,1)
-        pygame.draw.lines(s,OSSO,False,[(x,cy-9),(x,cy),(x+5,cy+3)],2)
 
 
 def lume(s,l,cx,t):
@@ -586,6 +582,8 @@ class Paisagem:
                 pygame.draw.lines(s,(120,147,119),False,[(px-cx,440),(px+5-cx,436),(px+9-cx,438)],2)
         if hasattr(j,"sala_id"): sustentar_galho_do_duelo(s,j,cx)
         for tr in j.solidos: terreno(s,tr,cx,i)
+        from .sinalizacao import desenhar as descidas
+        descidas(s,j,cx)
         for o in j.objetos: objeto(s,o,j,cx,t)
         if "raiz" in j.flags or "no" in j.flags: mata_reacesa(s,j,cx,t)
         for e in j.inimigos:
@@ -626,10 +624,10 @@ class Paisagem:
 
 
 def hud(s,j):
-    from .cartografia import minimapa, rastro_objetivo
+    from .cartografia import rastro_objetivo
+    from .avisos import ocupa_esquerda
+    livre=not ocupa_esquerda(j)
     rastro_objetivo(s,j)
-    from .tutorial import desenhar as ensinar
-    ensinar(s,j)
     painel(s,(19,18,213,100))
     texto(s,'VIDA',33,23,12,(210,139,126),'forte')
     texto(s,f'{max(0,round(j.lume.vida)):02d}',217,20,20,OSSO,'titulo','right')
@@ -643,20 +641,20 @@ def hud(s,j):
     duelo=hasattr(j,"sala_id")
     leitura=f"Avisos   {j.inimigos[0].sequencia}" if duelo else f"Orvalho  {min(j.orvalhos,3)} / 3"
     texto(s,leitura,217,95,12,PALIDO,"normal","right")
-    if j.lume.energia<=0:texto(s,'Sem brilho · habilidades usam vida',22,159,11,(218,151,132),'forte')
-    if j.lume.abate_ate>j.tempo:
+    if j.lume.energia<=0 and livre:texto(s,'Sem brilho · habilidades usam vida',22,159,11,(218,151,132),'forte')
+    if j.lume.abate_ate>j.tempo and livre:
         hp,br=j.lume.ganho_abate
         texto(s,f'Abate +{hp:g} vida / +{br:g} brilho',22,175,12,TEAL,'forte')
-    if j.lume.combo_acertos:
+    if j.lume.combo_acertos and livre:
         mult=min(8.,1.25**min(10,j.lume.combo_acertos//3))
         texto(s,f'Sequência {j.lume.combo_acertos} · retorno {mult:.2f}×',22,210,11,TEAL,'forte')
     painel(s,(682,18,259,64))
     if duelo: local=f"ENSAIO    •    SEMENTE {j.semente}"
-    elif j.modo=="historia": local="TRAVESSIA   "+ROMANOS[j.etapa]
-    else: local=f"INFINITO   {j.volta*4+j.etapa+1}   ·   {max(0,int(j.tempo_restante))} s"
+    else: local="TRAVESSIA   "+ROMANOS[j.etapa]
     texto(s,local,925,24,12,AMBAR,"forte","right")
     from .raizes_bosque import setor
     texto(s,j.setor_vertical if j.em_vertical else setor(j) or j.fase.name,925,44,20,OSSO,"titulo","right")
+    texto(s,'M · mapa',925,68,10,PALIDO,'normal','right')
     if not duelo:
         item=j.bolsa.item
         qtd="ferramenta" if item.permanente and j.bolsa.quantidade else str(j.bolsa.quantidade)
@@ -665,9 +663,9 @@ def hud(s,j):
         icone_item(s,item.id,38,151,24,24)
         texto(s,f"{item.nome}  ·  {qtd}",57,124,13,PALIDO,"forte")
         texto(s,"Q  trocar   F  usar",57,140,11,PALIDO)
-        if j.bolsa.tanino_ate>j.tempo:
+        if j.bolsa.tanino_ate>j.tempo and livre:
             texto(s,f"Tanino ativo · {math.ceil(j.bolsa.tanino_ate-j.tempo)} s",22,192,12,AMBAR,"forte")
-    if getattr(j, 'ensaio_armas', False):
+    if getattr(j, 'ensaio_armas', False) and livre:
         nome = 'Agulha · alcance longo' if j.lume.arma.equipamento=='agulha' else 'Espinho · cortes rápidos'
         painel(s,(19,214,236,44),False)
         texto(s,nome,30,219,14,AMBAR,'forte')
@@ -685,23 +683,5 @@ def hud(s,j):
             pygame.draw.rect(s,(53,55,52),(279,62,360,6))
             pygame.draw.rect(s,AMBAR,(279,62,round(360*j.boss.vida/j.boss.vida_max),6))
             texto(s,"Fraqueza exposta = crítico",459,72,10,PALIDO,"normal","centerx")
-    # M abre o mapa sob demanda.
-    if j.interacao and not j.dialogo:
-        msg="E   "+j.interacao
-        cx=max(165,min(795,j.lume.rect.centerx-j.camera))
-        minimo=182 if j.boss and not j.boss.vencido else 122
-        y=max(minimo,min(365,j.lume.rect.top-j.camera_y-62))
-        for teto in (() if j.em_vertical else j.fase.tetos):
-            x_teto,y_teto,largura,altura=teto
-            if x_teto-16 < j.lume.rect.centerx < x_teto+largura+16 and j.lume.rect.top >= y_teto+altura-3:
-                y=min(y,y_teto-31)
-        w=max(110,len(msg)*8+22)
-        painel(s,(cx-w//2,y,w,27))
-        texto(s,msg,cx,y+3,15,OSSO,"forte","centerx")
-    if j.dialogo: return
-    s.blit(placa(960,52,225),(0,488))
-    texto(s,"MAPA  [M]",937,505,13,PALIDO,"forte","right")
-    from .cartografia import texto_curto
-    texto(s,texto_curto(j.objetivo,790,17,"forte"),22,491,17,OSSO,"forte")
-    info=j.aviso if j.aviso_t>0 and j.aviso!=j.fase.name else j.dica_local
-    texto(s,texto_curto(info,790,14),22,516,14,PALIDO)
+    from .avisos import desenhar
+    desenhar(s,j)

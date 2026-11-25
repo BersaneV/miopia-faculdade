@@ -153,7 +153,7 @@ def morte(a,s):
         detalhe += (" Resta uma fagulha." if j.lume.vidas==1 else
                     f" Restam {j.lume.vidas} fagulhas." if j.lume.vidas else " A última fagulha se apagou.")
     paragrafo(s,detalhe,212,222,536,18,PALIDO)
-    nome="Tentar outra noite" if terminal and j.modo=="infinito" else "Voltar ao último marco"
+    nome="Voltar ao último marco"
     if a.ensaio is not None:
         nome="Repetir o ensaio"
     voltar="Voltar ao campo de testes" if a.ensaio==INDICE_ARANHA else "Voltar ao menu"
@@ -254,17 +254,18 @@ def pagina_mapa(a,s,corte=False):
     from .mapa_visor import contexto,QUADRO
     from .missoes import rastreada
     j=contexto(a.jogo,corte);v=a.mapa_visor;v.preparar(j)
-    texto(s,'Corte da Figueira' if j.em_vertical else j.fase.name,85,134,23,AMBAR,'titulo')
-    texto(s,texto_curto('Acompanhando: '+rastreada(a.jogo).titulo,620,12),85,165,12,AMBAR)
-    texto(s,'Âmbar · Lume   Verde · objetivo   Círculo · marco',85,182,11,PALIDO)
-    texto(s,f'{v.zoom:.1f}×',864,174,14,AMBAR,'forte','right')
-    v.desenhar(s,j)
+    for n,l in enumerate(linhas(a.jogo.objetivo,780,17,'forte')[:2]):
+        texto(s,l,480,132+n*21,17,OSSO,'forte','centerx')
     alvo=alvo_local(j)
-    texto(s,texto_curto(a.jogo.objetivo,780,15,'forte'),85,402,15,OSSO,'forte')
     detalhe=alvo.detalhe if alvo else 'Explore as trilhas e marque os lugares a que deseja voltar.'
+    if getattr(a.jogo,'ensino_ate',0)>a.jogo.tempo:detalhe=getattr(a.jogo,'ensino_detalhe',detalhe)
     if getattr(j,'_mapa_sem_lume',False):detalhe='Consulta do Corte · C centraliza no último marco; Lume está na superfície.'
     if a.mapa_aviso_ate>a.relogio:detalhe=a.mapa_aviso
-    texto(s,texto_curto(detalhe,780,12),85,423,12,PALIDO)
+    for n,l in enumerate(linhas(detalhe,780,12)[:2]):texto(s,l,480,180+n*16,12,PALIDO,'normal','centerx')
+    regiao='Corte da Figueira' if j.em_vertical else j.fase.name
+    texto(s,regiao+' · Âmbar: Lume   Verde: objetivo   Sinais: descida',85,215,11,AMBAR)
+    texto(s,f'{v.zoom:.1f}×',864,212,14,AMBAR,'forte','right')
+    v.desenhar(s,j)
     bolsa=a.jogo.bolsa
     bonus=[f'Bálsamos {bolsa.estoque["balsamo"]}/{bolsa.capacidade_balsamo} · reserva {bolsa.reserva_balsamo}']
     if bolsa.bonus_dano>1:bonus.append('dano +25%')
@@ -345,7 +346,7 @@ def fim(a,s):
         texto(s,a.aviso_replay,84,256,16,PALIDO)
         opcoes(a,s,a.fim_nomes(),77,346,470,40)
         return
-    chave=j.estado if j.modo=="historia" else "infinito"
+    chave=j.estado
     titulo,msg=FINAL[chave]
     if chave=='vitoria':
         from .resgates import mensagem_final
@@ -365,6 +366,6 @@ def recordes(a,s):
     if not rows: paragrafo(s,"Conclua uma jornada para gravar o primeiro resultado.",85,168,724,20)
     for i,(modo,n,p,fase) in enumerate(rows):
         y=159+102*i
-        texto(s,"História" if modo=="historia" else "Infinito",84,y,27,AMBAR,"titulo")
+        texto(s,"História",84,y,27,AMBAR,"titulo")
         texto(s,f"{n} jornada(s) encerrada(s)     ·     {p} pontos de recorde     ·     trecho {fase}",85,y+44,17)
     texto(s,"Esc ou Enter   ·   voltar",84,462,15,PALIDO)

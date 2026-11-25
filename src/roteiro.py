@@ -19,8 +19,6 @@ FINAL = {
         "Ao amanhecer, Brasa chega ao berçário com uma gota, e não passa direto. Casca abre os dois canais. Da borda vem a resposta de Eco. Ainda há ninhos vazios. A Coruja ouve passar, um por um, os que voltam."),
     "derrota": ("Quando a raiz silencia",
         "Lume deixa de ver o próximo sulco. O orvalho seca nas folhas. No abrigo, Mimo levanta a casca para o último grupo passar. Cada um parte por um caminho."),
-    "infinito": ("O fim desta noite",
-        "A última luz se recolhe. Na casca ficam as marcas dos trechos que Lume conseguiu atravessar."),
 }
 def epilogo(jogo):
     entregues = [i for i in range(4) if "pedido_entregue" in jogo.historico.get((0, i), ())]

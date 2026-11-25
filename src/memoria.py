@@ -76,4 +76,4 @@ class Memoria:
 
     def recordes(self):
         return self.db.execute("""SELECT modo, COUNT(*), MAX(pontos), MAX(etapa)
-                                  FROM tentativas GROUP BY modo ORDER BY modo""").fetchall()
+                                  FROM tentativas WHERE modo='historia' GROUP BY modo ORDER BY modo""").fetchall()

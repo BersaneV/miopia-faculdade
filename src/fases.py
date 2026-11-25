@@ -321,38 +321,3 @@ def terrenos(indice, flags):
     if "chefe" not in flags:
         add(FIM_ARENA, 78, 26, CHAO - 78, "porta")
     return out
-
-# A topologia e os mecanismos não variam no Infinito. Estes pontos foram
-# escolhidos em chão firme ou sobre um apoio alcançável dos mapas de campanha.
-VIGILIAS = (("morcego", "Vigília das asas"), ("aranha", "Travessia dos fios"), ("sombra", "Rastro do Breu"))
-POUSOS = ((1585, 712, 895), (1632, 642, 1168), (1590, 645, 1285), (1495, 635, 1744))
-ORVALHO_ALTO = ((742, 221), (742, 218), (752, 217), (743, 216))
-# O quinto ponto de coleta alterna entre galho alto e pequeno desvio no solo.
-GOTAS_VARIANTES = (((1322, 346), (1575, 417)), ((616, 285), (1210, 416)),
-                   ((1388, 348), (1610, 416)), ((1509, 346), (1420, 417)))
-
-
-def montar_infinito(indice, volta):
-    """A mesma volta no mesmo bioma é reproduzível em visitas e recargas."""
-    fase = FASES[indice]
-    tipo, nome = VIGILIAS[(indice + volta) % len(VIGILIAS)]
-    quantidade = min(3, 1 + volta)
-    inimigos = []
-    for n, x in enumerate(POUSOS[indice][:quantidade]):
-        especie = tipo if n < 2 else VIGILIAS[(indice + volta + 1) % len(VIGILIAS)][0]
-        # Deslocamentos limitados preservam margem antes de teto e poço.
-        x += (-12, 0, 12, 6)[(volta + n + indice) % 4]
-        inimigos.append((especie, x, CHAO - 84 if especie == "morcego" else CHAO))
-    gotas = list(fase.orvalhos)
-    gotas[4] = GOTAS_VARIANTES[indice][(volta + indice) % 2]
-    deslocamentos = (-12, 10, -5, 15, 0)
-    gotas = [(x + deslocamentos[(volta + indice + n) % len(deslocamentos)], y)
-             for n, (x, y) in enumerate(gotas)]
-    # O ramal também é patrulhado. A geometria crítica do salto fica livre;
-    # espécies de emboscada esperam na margem ou no próximo patamar.
-    for especie, x, y in RAMAIS[indice].inimigos[:min(1+volta, 2)]:
-        inimigos.append((especie,x+12*(volta%2),y))
-    alto = ORVALHO_ALTO[indice]
-    # A gota dourada ocupa o ramo opcional, sem se sobrepor à gota comum.
-    gotas = [p for p in gotas if abs(p[0] - alto[0]) > 26 or abs(p[1] - alto[1]) > 30]
-    return nome, inimigos, gotas, alto

@@ -156,12 +156,13 @@ def atualizar(j,dt):
         j.flags.add('caruncho_vencido')
         j.notificar('O Caruncho recua. Recolha o âmbar à esquerda e solte o nó do cipó.',7.)
         j.eventos.append('vencer')
-    alvo=max(0.,min(ALTURA-540.,j.lume.rect.centery-(CHAO-21)))
-    j.camera_y+=(alvo-j.camera_y)*(1.-math.exp(-8.5*dt))
+    from .sinalizacao import camera_vertical
+    camera_vertical(j,ALTURA,dt)
 
 
 def camera(j):
-    j.camera_y=max(0.,min(ALTURA-540.,j.lume.rect.centery-(CHAO-21)))
+    from .sinalizacao import camera_vertical
+    camera_vertical(j,ALTURA)
 
 
 def limite_queda(j):

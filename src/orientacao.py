@@ -117,7 +117,7 @@ def _superficie(j):
                      "Os mecanismos abriram a porteira. Descanse no marco antes de entrar na arena à direita.")
     if "raiz" not in j.flags:
         if j.orvalhos < 3:
-            gotas = [o for o in j.objetos if o.tipo == "orvalho" and o.id != "gota_minuto"]
+            gotas = [o for o in j.objetos if o.tipo == "orvalho"]
             if gotas:
                 o = min(gotas, key=lambda o: math.dist((o.x, o.y), j.lume.rect.center))
                 return _alvo(j, o.id, "Orvalho da raiz", f"Recolha orvalho ({j.orvalhos}/3)", o.x, o.y,

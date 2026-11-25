@@ -1,6 +1,21 @@
 """Ensino contextual durante a partida. Não pausa e não exige abrir um menu."""
 from .narrativa import ITENS
 
+CURTAS={
+    'primeiros_passos':'A / D move. Espaço salta. S agacha. E interage perto de pessoas e mecanismos.',
+    'reservas':'Vida recebe dano. K e Ctrl usam brilho; se faltar, usam vida. Brilho não drena sozinho.',
+    'salto_duplo':'Solte Espaço e aperte de novo no ar. Segure na queda para planar.',
+    'combate':'J rápido, L pesado. Alterne J/L/J. S + J no ar rebate; Shift + direção + J avança.',
+    'deslize':'S agacha. Shift + direção desliza sob raízes. Solte S para saltar.',
+    'luz_combate':'K clareia. Ctrl + J / L carrega luz. No escuro, K atrapalha a visão dos inimigos.',
+    'menus':'M / Tab abre o mapa. Esc / P pausa. F10 silencia; F11 alterna tela cheia.',
+    'grade':'S + Espaço desce de grades e galhos. Terra firme não deixa passar.',
+    'corda':'E na base sobe pelo cipó. Marcos guardam retorno, sem curar.',
+    'parede':'Toque o tronco e salte para a parede oposta. Alterne as faces para subir.',
+    'planagem':'Segure Espaço ao cair para planar. Solte ou aperte S para descer mais rápido.',
+    'combos_luz':'Acertos devolvem brilho. Sem sofrer dano, o retorno cresce até 8×; um golpe ou queda zera.',
+    'tochas':'Vença os guardas, recolha o núcleo com E e acenda a tocha. O globo Q/F ilumina outro local.'}
+
 
 def atualizar(j,cmd):
     if (j.modo!='historia' or hasattr(j,'sala_id') or getattr(j,'ensaio_armas',False) or
@@ -9,7 +24,9 @@ def atualizar(j,cmd):
     candidatos=[];condicoes=set()
     def dica(ident,cond,titulo,texto):
         if cond:condicoes.add(ident)
-        if cond and ident not in j.tutorial:candidatos.append((ident,titulo,texto))
+        if cond and ident not in j.tutorial:
+            curto=CURTAS.get(ident,texto.split('.')[0]+'.')
+            candidatos.append((ident,titulo,curto,texto))
     dica('primeiros_passos',j.etapa==0 and x<220,'O primeiro caminho','A / D ou setas movem Lume. Espaço salta. Seta para baixo ou S agacha. Continue pela direita; E conversa quando aparecer uma indicação.')
     dica('reservas',j.etapa==0 and x>=290,'Vida e brilho','Vida recebe dano. Brilho só gasta no K e nos ataques de luz. Ao zerar, o halo apaga; insistir numa habilidade usa vida. Derrotar inimigos recupera um pouco das duas barras.')
     dica('salto_duplo',j.etapa==0 and 220<x<600,'Outra batida de asas','Solte Espaço depois do salto e aperte novamente no ar: é o salto duplo. Segure Espaço durante a queda para planar sem limite de tempo.')
@@ -33,14 +50,11 @@ def atualizar(j,cmd):
         candidatos=locais
     elif locais:candidatos=locais
     if candidatos:
-        ident,titulo,texto=candidatos[0];j.tutorial.add(ident)
+        ident,titulo,texto,detalhe=candidatos[0];j.tutorial.add(ident)
         j.ensino_id=ident
-        j.ensino_titulo=titulo;j.ensino_texto=texto;j.ensino_ate=j.tempo+9.
+        j.ensino_titulo=titulo;j.ensino_texto=texto;j.ensino_detalhe=detalhe;j.ensino_ate=j.tempo+6.
 
 
 def desenhar(s,j):
-    if getattr(j,'ensino_ate',0)<=j.tempo or j.dialogo:return
-    from .ilustracao import painel,texto,linhas,AMBAR,PALIDO
-    painel(s,(252,124,425,120),False)
-    texto(s,j.ensino_titulo,267,132,16,AMBAR,'forte')
-    for n,l in enumerate(linhas(j.ensino_texto,392,14)[:4]):texto(s,l,267,159+n*18,14,PALIDO)
+    from .avisos import desenhar as aviso
+    aviso(s,j)

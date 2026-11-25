@@ -8,7 +8,7 @@ Instale Python 3.10 a 3.14. No Linux ou macOS, rode `sh ./rodar.sh`. No Windows,
 
 Um raio parte a figueira e apaga o berçário. Lume, o menor dos vaga-lumes, escapa porque seu brilho é fraco demais para o Breu perceber. Com as asas feridas, precisa seguir as raízes a pé. A volta atravessa quatro trechos de Mata Atlântica. Em cada um, a luz revela só o que está perto e o orvalho devolve o fôlego necessário para avançar.
 
-Cada um dos quatro mapas do **modo História** passou de 2.920 para 4.720 px. Há marcos no meio da fase e antes da arena, câmaras inferiores, rotas opcionais, pedidos de moradores e dois desfechos. Em cada bioma, recolha três gotas, opere os mecanismos, passe pela guardiã e devolva a luz à raiz. O **modo Infinito** emenda os biomas sob um relógio contínuo. Patrulhas e posições de orvalho mudam a cada volta. Uma gota dourada devolve oito segundos e as raízes restauradas estendem o relógio.
+Cada um dos quatro mapas do **modo História** passou de 2.920 para 4.720 px. Há marcos no meio da fase e antes da arena, câmaras inferiores, rotas opcionais, pedidos de moradores e dois desfechos. Em cada bioma, recolha três gotas, opere os mecanismos, passe pela guardiã e devolva a luz à raiz. O antigo modo Infinito foi removido no S09; a aventura segue como História, com ensaios isolados para avaliação.
 
 | Trecho | Descoberta | Guardião |
 |---|---|---|
@@ -44,7 +44,7 @@ O morcego segue o brilho. A aranha pode disparar seda, a vespa mira ferrões, a 
 
 ## Dados locais e dificuldade
 
-Ajustes de ambiência, efeitos, brilho, mudo e dificuldade ficam em SQLite, junto do marco de História, dos registros do diário e do histórico de partidas encerradas. Na reabertura, **Continuar história** recupera a campanha no último marco. É possível iniciar um desafio Infinito sem sobrescrever essa campanha. A dificuldade escolhida vale para a próxima jornada. Os níveis ajustam fagulhas, dano e consumo de luz.
+Ajustes de ambiência, efeitos, brilho, mudo e dificuldade ficam em SQLite, junto do marco de História, dos registros do diário e do histórico de partidas encerradas. Na reabertura, **Continuar história** recupera a campanha no último marco. O Campo de testes preserva essa campanha. Recordes antigos do Infinito permanecem guardados, sem aparecer na lista atual. A dificuldade escolhida vale para a próxima jornada. Os níveis ajustam fagulhas, dano e consumo de luz.
 
 No Linux, os dados vão para `$XDG_DATA_HOME/miopia` ou `~/.local/share/miopia`. No Windows, o código usa `%LOCALAPPDATA%/Miopia`. A pasta do jogo pode ser somente leitura.
 

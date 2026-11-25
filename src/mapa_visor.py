@@ -3,7 +3,7 @@ from copy import copy
 import pygame
 from .cartografia import dimensoes
 
-QUADRO=pygame.Rect(85,197,780,200)
+QUADRO=pygame.Rect(85,231,780,202)
 
 
 def contexto(j,corte=False):

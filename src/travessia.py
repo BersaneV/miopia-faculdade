@@ -9,7 +9,7 @@ from .combate import Arma, Inimigo
 from .taticas import Habitante
 from .fases import VIGIA_X, TRANCA_X
 from .fases import (ARENA, CHAO, FIM_ARENA, FALAS, FASES, MEIO, RAIZ, SAIDA,
-                    RAMAIS, Objeto, Terreno, montar_infinito, terrenos)
+                    RAMAIS, Objeto, Terreno, terrenos)
 
 
 from . import narrativa, corte_vertical, subsolo, raizes_bosque, recursos, resgates
@@ -248,7 +248,8 @@ MANIVELAS = {
 
 class Jornada:
     def __init__(self, modo="historia", dificuldade="normal", etapa=0):
-        self.modo = modo.lower()
+        if modo.lower()!='historia':raise ValueError('Somente o modo História está disponível.')
+        self.modo = 'historia'
         self.dificuldade = dificuldade.lower()
         self.dreno, self.dano, self.vidas_iniciais = NIVEIS.get(self.dificuldade, NIVEIS["normal"])
         self.dreno *= .36
@@ -267,7 +268,6 @@ class Jornada:
         self.concluida = False
         self.escolha_resgate = None
         self.tempo = 0.
-        self.tempo_restante = 120.
         self.pontuacao = 0
         self.restauradas = 0
         self.volta = 0
@@ -294,10 +294,6 @@ class Jornada:
         self.boss = None
         inimigos = self.fase.inimigos
         self.gotas = self.fase.orvalhos
-        self.gota_minuto = None
-        self.variante = ""
-        if self.modo == "infinito":
-            self.variante, inimigos, self.gotas, self.gota_minuto = montar_infinito(indice, self.volta)
         self.inimigos = [Habitante(*e, dificuldade=self.dificuldade) for e in inimigos if "inimigo_" + str(e[1]) not in self.flags]
         if subsolo.ativo(self) and "inimigo_2860" not in self.flags:
             self.inimigos.append(Habitante("aranha",2860,1102,dificuldade=self.dificuldade))
@@ -315,8 +311,7 @@ class Jornada:
         self.recolocar(pos)
         self.camera = max(0, min(self.fase.width - 960, pos[0] - 340))
         self.eventos.append("etapa")
-        self.notificar(f"Noite {self.volta + 1} · {self.variante}. Orvalho dourado: +8 s."
-                       if self.variante else self.fase.name)
+        self.notificar(self.fase.name)
 
     def salvar(self):
         """Salva o progresso assentado. Objetos transitórios da arena renascem no marco."""
@@ -329,7 +324,7 @@ class Jornada:
             "etapa": self.etapa, "volta": self.volta, "vidas": self.lume.vidas,
             'energia': max(0.,self.lume.energia), 'retorno_pendente':self.estado in ('caido','derrota'),
             'vida':max(0.,self.lume.vida),
-            "tempo": self.tempo, "tempo_restante": self.tempo_restante,
+            "tempo": self.tempo,
             "pontuacao": self.pontuacao, "diario": list(self.diario),
             "bolsa": self.bolsa.salvar(self.tempo),
             'sobreviventes':{k:dict(v) for k,v in self.sobreviventes.items()},'concluida':self.concluida,
@@ -384,7 +379,6 @@ class Jornada:
         jogo.diario = [(str(titulo), str(texto)) for titulo, texto in dados["diario"]]
         jogo.tempo = max(0., float(dados["tempo"]))
         jogo.bolsa = narrativa.Bolsa.carregar(dados.get("bolsa"), jogo.tempo)
-        jogo.tempo_restante = max(1., float(dados["tempo_restante"]))
         jogo.pontuacao = max(0, int(dados["pontuacao"]))
         jogo.lume.vidas = min(jogo.vidas_iniciais, max(1, int(dados["vidas"])))
         jogo.entrar(etapa)
@@ -492,8 +486,6 @@ class Jornada:
         out = [Objeto(o.id, o.tipo, *deslocados[o.id], o.nome, o.requer) if o.id in deslocados else o for o in out]
         out.extend(Objeto(f"gota_{n}", "orvalho", x, y, "Orvalho") for n, (x, y) in
                    enumerate(self.gotas) if f"gota_{n}" not in self.flags)
-        if self.gota_minuto and "gota_minuto" not in self.flags:
-            out.append(Objeto("gota_minuto", "orvalho", *self.gota_minuto, "Orvalho da madrugada"))
         tipo_marco='marco' if recursos.limitado(self) else 'refugio'
         out.extend((
             Objeto("abrigo", "refugio", 114 if self.etapa == 0 else 82, CHAO, "Descansar sob a casca"),
@@ -848,9 +840,6 @@ class Jornada:
                 self.pontuacao += 180
                 self.lume.energia = 100.
                 self.lume.vida = 100.
-                if self.modo == "infinito":
-                    premio = 51 - min(5, self.volta) * 4
-                    self.tempo_restante = min(150., self.tempo_restante + premio)
                 self.eventos.append("raiz")
                 self.notificar("O orvalho corre pelas raízes de fora. O caminho responde.")
                 narrativa.guardar_virada(self, narrativa.RAIZES)
@@ -859,7 +848,7 @@ class Jornada:
         elif o.tipo == "saida":
             if "raiz" not in self.flags:
                 self.notificar("A trilha se abre quando a raiz recebe o orvalho.")
-            elif self.etapa == 3 and self.modo != "infinito":
+            elif self.etapa == 3:
                 if self.concluida:
                     self.notificar('A floresta continua aberta. Volte pelos biomas e procure quem ficou para trás.',6.)
                 else:
@@ -867,10 +856,7 @@ class Jornada:
                     self.estado = "vitoria"
                     self.eventos.append("vitoria")
             else:
-                if self.etapa == 3:
-                    self.volta += 1
-                    self.tempo_restante = min(self.tempo_restante, max(85., 155. - self.volta * 8))
-                self.entrar((self.etapa + 1) % 4)
+                self.entrar(self.etapa + 1)
         elif o.tipo == "voltar":
             self.entrar(self.etapa - 1, retorno=True)
 
@@ -935,12 +921,6 @@ class Jornada:
         if self.aviso_t <= 0: self.aviso = ""
         self.aplicar_reliquias()
         # Brilho estável: só habilidades de luz têm custo (decisão S08).
-        if self.modo == "infinito":
-            self.tempo_restante -= dt
-            if self.tempo_restante <= 0:
-                self.estado = "derrota"
-                self.eventos.append("derrota")
-                return
         if self.em_vertical:
             corte_vertical.passo(self,dt,cmd,clarao)
             return
@@ -971,9 +951,6 @@ class Jornada:
         for o in self.objetos:
             if o.tipo == "orvalho" and l.rect.inflate(16, 18).collidepoint(o.x, o.y):
                 self.flags.add(o.id)
-                if o.id == "gota_minuto":
-                    self.tempo_restante += 8
-                    self.notificar("Orvalho da madrugada · +8 segundos")
                 l.energia = min(100., l.energia + 20)
                 self.pontuacao += 10
                 self.eventos.append("coleta")

@@ -130,6 +130,8 @@ def desenhar(s,j,t,nivel_brilho):
         if tr.rect.bottom+30>=cy and tr.rect.top-18<=cy+540:
             i=3 if tr.rect.y>=1200 else 0
             terreno(camada,tr,cx,i)
+    from .sinalizacao import desenhar as descidas
+    descidas(camada,j,cx)
     for o in j.objetos:
         if cy-10<o.y<cy+630 and cx-60<o.x<cx+1020:
             desenhar_ponto(camada,o,j,cx)

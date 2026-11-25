@@ -50,8 +50,5 @@ def limite_queda(j):
 
 
 def camera(j, dt=None):
-    alvo = max(0., min(ALTURA-540., j.lume.rect.centery-(CHAO-21.)))
-    if dt is None:
-        j.camera_y = alvo
-    else:
-        j.camera_y += (alvo-j.camera_y) * (1.-math.exp(-8.5*dt))
+    from .sinalizacao import camera_vertical
+    camera_vertical(j,ALTURA,dt)

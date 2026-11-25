@@ -120,7 +120,7 @@ class App:
 
     def menu_nomes(self):
         itens=["Continuar história","Nova história"] if self.mem_camp else ["Jogar história"]
-        return itens+["Modo infinito","Campo de testes","Como jogar","Ajustes","Recordes","Créditos","Sair"]
+        return itens+["Campo de testes","Como jogar","Ajustes","Recordes","Créditos","Sair"]
 
     def fim_nomes(self):
         if self.ensaio==INDICE_ARANHA:
@@ -327,7 +327,6 @@ class App:
             elif nome=="Nova história":
                 self.confirmar("nova","Começar outra história?","O novo percurso ocupará o marco salvo desta campanha.","Começar de novo")
             elif nome=="Continuar história": self.iniciar("historia",True)
-            elif nome=="Modo infinito": self.iniciar("infinito")
             elif nome=="Sair": self.rodando=False
             elif nome=="Campo de testes":
                 self.mudar("ensaios")
@@ -357,8 +356,6 @@ class App:
             if i==0:
                 if self.ensaio is not None:
                     self.comecar_ensaio(self.ensaio,self.jogo.dificuldade)
-                elif self.jogo.estado=="derrota" and self.jogo.modo=="infinito":
-                    self.iniciar("infinito")
                 else:
                     if self.jogo.estado=="derrota":
                         self.jogo.lume.vidas=self.jogo.vidas_iniciais

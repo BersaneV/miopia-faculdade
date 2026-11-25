@@ -1,4 +1,4 @@
-"""Reservas finitas da História. Ensaios de referência e Infinito mantêm suas regras."""
+"""Reservas finitas da História. Ensaios de referência permitem recuperação."""
 def limitado(j):
     return j.modo=='historia' and not hasattr(j,'sala_id') and not getattr(j,'ensaio_armas',False)
 
@@ -38,6 +38,5 @@ def descansar(j,o):
 
 
 def iluminar_marco(j):
-    # O ponto de retorno não fornece cura repetível. No Infinito mantém a
-    # economia de tempo/luz existente, que possui testes próprios.
+    # Pontos de retorno não fornecem cura repetível na campanha.
     if not limitado(j):j.lume.energia=j.lume.vida=100.

@@ -39,8 +39,6 @@ class Oficina(Jornada):
         self.flags=self.historico.setdefault((0,0),set())
         self.boss=None
         self.gotas=()
-        self.gota_minuto=None
-        self.variante=''
         self.checkpoint=ABRIGO
         self.reiniciar()
 

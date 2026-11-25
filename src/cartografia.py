@@ -107,6 +107,12 @@ def mapa_local(s,j,rect,compacto=False,*,janela_mundo=None):
             from .arte_raizes import nomes_mapa
             nomes_mapa(s,j,r,ponto,conhecida)
     from .marcas_mapa import desenhar as desenhar_marcas
+    from .sinalizacao import descidas
+    for rampa in descidas(j):
+        x,y=rampa.centerx,rampa.top+20
+        if mundo.collidepoint(x,y) and conhecida(j,x,y):
+            px,py=ponto(x,y)
+            pygame.draw.lines(s,AMBAR,False,[(px-3,py-2),(px,py+2),(px+3,py-2)],1)
     from .luzes_mundo import fontes as globos
     for x,y,raio in globos(j):
         if mundo.collidepoint(x,y) and conhecida(j,x,y):
