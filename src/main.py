@@ -422,6 +422,8 @@ class App:
                 if k in (*ACEITAR,pygame.K_e,pygame.K_ESCAPE): self.avancar_fala()
             elif k in (pygame.K_ESCAPE,pygame.K_p): self.mudar("pausa")
             elif k in (pygame.K_TAB,pygame.K_m): self.abrir_diario("jogo")
+            elif k==pygame.K_v and getattr(self.jogo,'ensaio_armas',False):
+                if self.jogo.trocar_arma(): self.som('pagina')
             elif k==pygame.K_q:
                 if self.gravacao: self.gravacao.acao(self.jogo,"trocar_item")
                 else: self.jogo.trocar_item()

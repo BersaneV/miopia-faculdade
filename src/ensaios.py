@@ -39,6 +39,12 @@ ENSAIOS = (
            "S + Espaço na grade desce sem trocar de mapa. Explore até a membrana de libélula e suba pelos galhos a leste."),
     Ensaio("Patrulha em dupla",0,(1510,CHAO),(),
            "Morcego e aranha usam vinte sequências por espécie. Q/F usa ferramentas; o pólen retarda asas e o tanino rompe carapaça."),
+    Ensaio('Casco Oco',2,(ARENA-20,CHAO),('meio','marco','no','brasa','vagem'),
+           'Salte o chifre, saia da aterrissagem e observe o segundo aviso na fase II. E empurra a seiva até o aro; E na brasa abre a carapaça.'),
+    Ensaio('A Coruja',3,(ARENA-20,CHAO),('meio','marco','roldana','contrapeso','eco_antigo'),
+           'Garras, rasantes e penas têm avisos próprios. E duas vezes na roda chama a Coruja à raiz direita. Suba nos apoios e use K perto da face exposta.'),
+    Ensaio('Oficina dos Espinhos',0,(160,CHAO),(),
+           'V alterna espinho rápido e agulha longa, que custa 2 de luz por corte. Compare em dois alvos imóveis. E no abrigo restaura luz e alvos. Protótipo isolado.'),
     Ensaio("Duelo da aranha",0,ABRIGO,(),
            "Referência S02 de fio e salto, com replay. Os vinte combos novos estão em Patrulha em dupla e na História. E recupera luz no abrigo."),
 )
@@ -49,6 +55,11 @@ def preparar_ensaio(indice, dificuldade, semente=SEMENTE_ARANHA):
     if indice == INDICE_ARANHA:
         return DueloAranha(dificuldade, semente)
     cena=ENSAIOS[indice]
+    if cena.nome=='Oficina dos Espinhos':
+        from .oficina_armas import Oficina
+        jogo=Oficina(dificuldade)
+        jogo.notificar(cena.pista,8)
+        return jogo
     jogo=Jornada("historia",dificuldade,cena.etapa)
     jogo.flags.update(cena.flags)
     jogo.entrar(cena.etapa)

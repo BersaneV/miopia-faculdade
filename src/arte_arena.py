@@ -197,6 +197,29 @@ def _linha_de_aviso(surf, inicio, fim):
 
 def _mira(surf, e, cx, cy):
     x, y = e.x-cx, e.y-cy
+    if e.indice == 2 and e.estado == 'aviso' and e.tecnica == 'salto':
+        from .casco import ponto_salto
+        # Mesmo arco parabólico e mesma aterrissagem usados pela simulação.
+        for n in range(0, 24, 2):
+            pontos = []
+            for p in (n/24, (n+1)/24):
+                px,py=ponto_salto((e.x,e.y),e.destino,e.alvo_y,p)
+                pontos.append((px-cx,py-cy))
+            pygame.draw.line(surf, FERRUGEM, *pontos, 2)
+        pygame.draw.ellipse(surf, FERRUGEM, (e.destino-cx-34,e.chao-cy-11,68,10),2)
+        return
+    if e.indice == 2 and e.estado in ('aviso', 'varrida_casco') and e.tecnica == 'varrida':
+        l = x if e.frente > 0 else x-113
+        pygame.draw.rect(surf, FERRUGEM, (l,e.chao-cy-72,113,71), 1, border_radius=8)
+        for n in range(3):
+            px = x+e.frente*(27+n*27)
+            pygame.draw.lines(surf, OURO, False, [(px-e.frente*6,e.chao-cy-32),(px,e.chao-cy-38),(px-e.frente*6,e.chao-cy-44)],2)
+        return
+    if e.indice == 3 and e.estado == 'aviso' and e.tecnica == 'penas':
+        dx, dy = e.destino-e.x, e.alvo_y-e.y
+        for fator in (-.16, .16):
+            _linha_de_aviso(surf, (x,y), (x+dx-dy*fator,y+dy+dx*fator))
+        return
     if e.estado in ("aviso", "rastro"):
         # A indicação desenha o plano de ataque, inclusive por cima da penumbra.
         if e.indice==1:
@@ -236,13 +259,21 @@ def desenhar_encontro(surf,e,cx,cy=0):
         face = x+e.frente*25
         pygame.draw.arc(surf,TEAL,(face-r,y-14-r,2*r,2*r),-.8 if e.frente>0 else 2.35,
                         .8 if e.frente>0 else 3.95,1)
-    pose = {"aviso":1,"rastro":1,"investida_seiva":2,"investida":2,"desce":2,"flor":2,"aberto":3,"repouso":3}.get(e.estado,0)
+    pose = {"aviso":1,"rastro":1,"investida_seiva":2,"investida":2,"desce":2,"flor":2,"aberto":3,"repouso":3,
+            'salto_casco':2,'varrida_casco':2,'muda_casco':3,'muda_coruja':1,'recolhe_coruja':0}.get(e.estado,0)
     if e.indice==0 and e.estado=="aviso" and e.asa_rasteira:
         pose = 2  # abre as asas horizontalmente já na preparação do rasante
     imagem = _corpo(e.indice,pose,int(e.relogio*(5 if pose==0 else 8))%4,e.frente)
     caixa = imagem.get_rect(center=(x,y))
     caixa.bottom = min(caixa.bottom, round(e.chao-cy+2))
     surf.blit(imagem,caixa)
+    if e.indice in (2,3) and getattr(e,'fase',1)==2 and not e.vencido:
+        # Cicatrizes e penas destacadas conservam a leitura da fase em mudo.
+        for n in range(3):
+            px=x-20+n*17
+            pygame.draw.lines(surf,OURO,False,[(px-4,y-27),(px+3,y-20),(px-2,y-11)],2)
+    if e.estado in ('muda_casco','muda_coruja'):
+        pygame.draw.circle(surf, OURO,(x,y),round(48+16*sin(e.relogio*8)),2)
 
 
 
@@ -252,6 +283,13 @@ def sinais_encontro(surf,e,cx,cy=0):
         x,y = f.x-cx, f.y-cy
         pygame.draw.line(surf,TEAL,(x-f.vx*.07,y-f.vy*.07),(x,y),2)
         pygame.draw.circle(surf,FIO,(round(x),round(y)),4)
+    for o in getattr(e, 'ondas', ()):
+        x,y=round(o.x-cx),round(o.y-cy)
+        pygame.draw.lines(surf,FERRUGEM,False,[(x-17,y-2),(x-7,y-16),(x,y-6),(x+8,y-14),(x+17,y-2)],3)
+    for p in getattr(e, 'penas', ()):
+        x,y=p.x-cx,p.y-cy
+        pygame.draw.line(surf,FIO,(x-p.vx*.035,y-p.vy*.035),(x,y),3)
+        pygame.draw.line(surf,OURO,(x-3,y-4),(x+4,y+4),1)
     for trama in e.tramas:
         faixa = trama.faixa.move(-cx,-cy)
         tom = FIO if trama.tempo > .55 else TEAL

@@ -18,11 +18,16 @@ def golpe_lume(s, lume, cx):
     ataque = lume.arma
     if not ataque.tipo:
         return
-    perfil = CORTES[ataque.tipo]
+    perfil = ataque.perfil
     if ataque.tempo < perfil.espera:
         losango(s, lume.rect.centerx-cx+ataque.face*18, lume.rect.centery-8, 3, OSSO)
         return
     x, y = lume.rect.centerx-cx, lume.rect.centery
+    if ataque.equipamento == 'agulha':
+        # Haste e ponta próprias; nenhum sprite de arma externa foi importado.
+        ponta = x + ataque.face * perfil.alcance
+        pygame.draw.line(s, (157,177,138), (x,y+5), (ponta,y-4), 3)
+        pygame.draw.lines(s, OSSO, False, [(ponta-ataque.face*12,y-10),(ponta,y-4),(ponta-ataque.face*10,y+2)],2)
     progresso = min(1., (ataque.tempo-perfil.espera)/perfil.ativo)
     restante = 1 - max(0., ataque.tempo - perfil.espera - perfil.ativo) / .12
     if restante <= 0:

@@ -24,6 +24,16 @@ CORTES = {
     "queda": Corte(.035, .24, .39, 54, 2),
 }
 
+# O segundo perfil fica restrito à oficina de armas até o parecer humano.
+AGULHA = {
+    'avanco': Corte(.08, .17, .55, 132, 4),
+    'corte1': Corte(.07, .13, .35, 102, 2),
+    'corte2': Corte(.10, .14, .42, 112, 2),
+    'corte3': Corte(.15, .16, .58, 123, 3),
+    'queda': Corte(.09, .24, .50, 75, 3),
+}
+ARMAS = {'espinho': CORTES, 'agulha': AGULHA}
+
 
 class Arma:
     """Um toque solicita um golpe. Cada alvo pode ser atingido uma vez por arco."""
@@ -38,9 +48,27 @@ class Arma:
         self.pedir_queda = False
         self.pedir_avanco = False
         self.rebote = 0.
+        self.equipamento = 'espinho'
+
+    @property
+    def perfil(self):
+        return ARMAS[self.equipamento][self.tipo] if self.tipo else None
+
+    def cancelar(self):
+        self.tipo = ''
+        self.pedido = self.intervalo = 0.
+        self.combo = 0
+
+    def trocar(self):
+        if self.tipo or self.pedido > 0:
+            return False
+        self.equipamento = 'agulha' if self.equipamento == 'espinho' else 'espinho'
+        self.combo = 0
+        self.intervalo = 0.
+        return True
 
     def pedir(self, queda, avanco=False):
-        self.pedido = .15
+        self.pedido = .22
         self.pedir_queda = queda
         self.pedir_avanco = avanco
 
@@ -49,32 +77,40 @@ class Arma:
         self.intervalo = max(0., self.intervalo - dt)
         if self.tipo:
             self.tempo += dt
-            if self.tempo >= CORTES[self.tipo].total:
+            # A fila tem um slot; o próximo toque aguarda o fim do movimento.
+            # Dano pode interromper o golpe, mas J não elimina a recuperação.
+            if self.tempo >= self.perfil.total:
                 self.tipo = ""
         inicio = False
         if self.pedido > 0 and not self.tipo and lume.impacto <= 0 and not lume.em_corda:
             baixo = self.pedir_queda and not lume.chao
             self.combo = 0 if baixo else (self.combo % 3 + 1 if self.intervalo > 0 else 1)
             self.tipo = "queda" if baixo else "corte" + str(self.combo)
-            if self.pedir_avanco and lume.chao and lume.energia>=8:
+            if self.pedir_avanco and lume.chao and lume.energia >= (10 if self.equipamento == 'agulha' else 8):
                 self.tipo="avanco"
-                lume.energia-=8
+            custo = (10 if self.equipamento == 'agulha' else 8) if self.tipo == 'avanco' else (2 if self.equipamento == 'agulha' else 0)
+            if lume.energia < custo:
+                self.pedido = 0.
+                self.tipo = ''
+                lume.golpe = 0.
+                return False
+            lume.energia -= custo
             self.tempo = 0.
             self.face = lume.face
             self.serie += 1
-            self.intervalo = CORTES[self.tipo].total + .43
+            self.intervalo = self.perfil.total + .43
             self.pedido = 0.
             if baixo:
                 lume.vy = max(lume.vy, 205)
             inicio = True
         self.pedido = max(0., self.pedido - dt)
-        lume.golpe = max(0., CORTES[self.tipo].total - self.tempo) if self.tipo else 0.
+        lume.golpe = max(0., self.perfil.total - self.tempo) if self.tipo else 0.
         return inicio
 
     def area(self, lume):
         if not self.tipo:
             return None
-        perfil = CORTES[self.tipo]
+        perfil = self.perfil
         if not perfil.espera <= self.tempo <= perfil.espera + perfil.ativo:
             return None
         if self.tipo == "queda":
@@ -432,7 +468,7 @@ class Inimigo:
 
     def acertar(self, arma, area, clarao, lume):
         pulso = clarao and Vetor(self.rect.center).distance_to(lume.rect.center) < 214
-        corte = area is not None and area.colliderect(self.rect) and self.ultimo_corte != arma.serie
+        corte = arma.perfil is not None and area is not None and area.colliderect(self.rect) and self.ultimo_corte != arma.serie
         if not (pulso or corte):
             return ""
         if corte:
@@ -447,7 +483,7 @@ class Inimigo:
         if pulso and self.tipo=="carabideo":
             return "bloqueio"
         dano_luz={"morcego":3,"sombra":3,"aranha":2,"vespa":1,"cobra":1}
-        self.vida -= dano_luz[self.tipo] if pulso else CORTES[arma.tipo].dano*getattr(lume, "bonus_dano", 1.)*fator
+        self.vida -= dano_luz[self.tipo] if pulso else arma.perfil.dano*getattr(lume, "bonus_dano", 1.)*fator
         self.ativo = self.vida > 0
         if not self.ativo:
             self.projeteis.clear()

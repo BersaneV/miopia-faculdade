@@ -587,6 +587,17 @@ class Jornada:
             return self.bolsa.usar(self)
         return None
 
+    def trocar_arma(self):
+        if not getattr(self, 'ensaio_armas', False) or self.estado != 'jogando' or self.dialogo:
+            return False
+        if self.lume.impacto > 0 or not self.lume.arma.trocar():
+            self.notificar('Conclua o golpe antes de trocar a arma.')
+            return False
+        agulha = self.lume.arma.equipamento == 'agulha'
+        self.notificar('Agulha de taquara: alcance longo, golpe mais lento, 2 de luz por corte.' if agulha
+                       else 'Espinho: cortes rápidos e curtos, sem custo de luz.')
+        return True
+
     def fechar_dialogo(self):
         self.dialogo = None
 
@@ -622,6 +633,8 @@ class Jornada:
             self.eventos.append("corda")
             return
         self.lume.iframes, self.lume.impacto = 1.25, .25
+        self.lume.arma.cancelar()
+        self.lume.golpe = 0.
         self.lume.energia = max(0., self.lume.energia - self.dano)
         self.eventos.append("dano")
 
@@ -878,7 +891,8 @@ class Jornada:
             ruido = 1.0 if l.slide > 0 or pouso else min(.66, abs(l.vx) / 360) if l.chao else .08
             eventos = self.boss.update(dt, l.rect, ruido=ruido, golpe=golpe, clarao=clarao,
                                        interagir=cmd.interagir, direcao=cmd.mover,
-                                       serie=l.arma.serie,bonus_dano=l.bonus_dano)
+                                       serie=l.arma.serie,bonus_dano=l.bonus_dano,
+                                       dano_corte=2*l.arma.perfil.dano if l.arma.perfil else 2.)
             self.eventos.extend(e for e in eventos if e != "dano_jogador")
             if "dano_jogador" in eventos: self.ferir()
             if self.boss.vencido:
@@ -904,6 +918,7 @@ class Jornada:
         for e in self.inimigos:
             if not e.ativo:
                 continue
+            golpe = lume.arma.area(lume)
             e.companhia=next((outro.rect.centerx for outro in self.inimigos if outro is not e
                 and outro.ativo and abs(outro.rect.centerx-e.rect.centerx)<350),None)
             resultado = e.acertar(lume.arma, golpe, clarao, lume)

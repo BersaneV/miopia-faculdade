@@ -189,6 +189,9 @@ def _subsolo(j):
 def objetivo_atual(j):
     if hasattr(j, "sala_id"):
         return None
+    if getattr(j,'ensaio_armas',False):
+        return _alvo(j,'oficina','Alvos de casca','Compare as duas armas',520,CHAO,
+                     'V troca fora do golpe. E no abrigo repõe luz e alvos; este ensaio não altera a História.',opcional=True)
     if getattr(j,"ensaio_tatico",False):
         e=next((e for e in j.inimigos if e.ativo and e.origem[0] in (1548,1660)),None)
         return _alvo(j,"patrulha","Patrulha da margem","Afaste a patrulha",e.rect.centerx if e else 1510,

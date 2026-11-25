@@ -22,10 +22,14 @@ def fundo(s,a):
     brilho(s,(774,278),45)
 
 
-def opcoes(a,s,nomes,x,y,w,passo=34,tam=18):
+def opcoes(a,s,nomes,x,y,w,passo=34,tam=18,limite=None):
     a.alvos=[]
+    primeiro=max(0,min(a.selecao-(limite or len(nomes))//2,len(nomes)-(limite or len(nomes))))
     for i,nome in enumerate(nomes):
-        r=pygame.Rect(x,y+i*passo,w,passo-2)
+        if limite is not None and not primeiro <= i < primeiro+limite:
+            a.alvos.append(pygame.Rect(0,0,0,0))
+            continue
+        r=pygame.Rect(x,y+(i-primeiro)*passo,w,passo-2)
         ativo=a.selecao==i
         if ativo:
             s.blit(placa(r.w,r.h,199),r)
@@ -58,7 +62,8 @@ def ensaios(a,s):
     livro(a,s,"Campo de testes","MIOPIA")
     texto(s,"Entre direto no trecho. Sua campanha fica salva à parte.",83,130,17,PALIDO)
     nomes=[c.nome for c in ENSAIOS]+["Voltar"]
-    opcoes(a,s,nomes,78,160,355,min(36,288//len(nomes)),17)
+    opcoes(a,s,nomes,78,160,355,26,17,limite=11)
+    texto(s,f'{a.selecao+1} / {len(nomes)}',873,144,11,PALIDO,'normal','right')
     if a.selecao<len(ENSAIOS):
         c=ENSAIOS[a.selecao]
         texto(s,c.nome,467,196,24,AMBAR,"titulo")

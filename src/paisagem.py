@@ -603,10 +603,16 @@ def hud(s,j):
         texto(s,"Q  trocar   F  usar",57,104,11,PALIDO)
         if j.bolsa.tanino_ate>j.tempo:
             texto(s,f"Tanino ativo · {math.ceil(j.bolsa.tanino_ate-j.tempo)} s",22,122,12,AMBAR,"forte")
+    if getattr(j, 'ensaio_armas', False):
+        nome = 'Agulha · 2 luz / corte' if j.lume.arma.equipamento=='agulha' else 'Espinho · sem custo'
+        painel(s,(19,142,236,44),False)
+        texto(s,nome,30,147,14,AMBAR,'forte')
+        texto(s,'V trocar arma · E no abrigo recupera luz',30,167,10,PALIDO)
 
     if j.boss and not j.boss.vencido:
         painel(s,(258,17,402,64))
-        texto(s,j.boss.nome,459,22,23,OSSO,"titulo","centerx")
+        nome=j.boss.nome + (' · II' if getattr(j.boss,'fase',1)==2 else '')
+        texto(s,nome,459,22,23,OSSO,"titulo","centerx")
         pygame.draw.rect(s,(53,55,52),(279,62,360,6))
         pygame.draw.rect(s,AMBAR,(279,62,round(360*j.boss.vida/j.boss.vida_max),6))
         texto(s,"Fraqueza exposta = crítico",459,72,10,PALIDO,"normal","centerx")

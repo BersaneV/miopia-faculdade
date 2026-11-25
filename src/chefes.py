@@ -41,6 +41,7 @@ class Fio:
     y: float
     vx: float
     vy: float
+    tempo: float = 3.
 
 
 @dataclass
@@ -106,6 +107,13 @@ class Encontro:
             self.x, self.y = self.cortina, chao-203.
         if indice == 2:
             self.x, self.y = self.inicio + largura * .77, chao-35.
+            from .casco import iniciar
+            iniciar(self)
+        if indice == 3:
+            from .coruja import iniciar
+            iniciar(self)
+        if indice in (2, 3):
+            self.tempo = .75
 
     @property
     def valvula(self):
@@ -136,18 +144,34 @@ class Encontro:
         if self.indice == 1 and self.estado == "aviso" and self.segundo_fio is not None:
             return "A teia bifurca. Saia das duas linhas ou rompa os fios com a cortina."
         if self.indice == 2:
+            if self.estado == 'muda_casco':
+                return 'O casco rachou: agora encadeia dois golpes. Leia o segundo aviso.'
+            if self.estado == 'aviso':
+                return {'salto': 'Ele vai saltar até a marca. Saia da queda e pule a onda.',
+                        'varrida': 'O chifre varre a frente. Afaste-se ou passe por cima.',
+                        'retorno': 'Ele muda de lado: prepare outra esquiva.',
+                        'carga': 'Chifre baixo. Salte quando ele se aproximar.'}.get(self.tecnica, self.ficha.pista)
             if self.estado in ("rastro", "investida_seiva", "flor"):
                 return "O guardião segue a seiva. Salte sobre o casco."
             if self.assentado:
                 return "A seiva encaixou. Toque a fonte de brasa (E)."
             if self.engatado:
                 return "Caminhe com a seiva até o aro âmbar no chão."
-        if self.indice == 3 and self.sino_movido:
-            return "Toque a corda na válvula. Siga o som até a parede."
+        if self.indice == 3:
+            if self.estado == 'aviso':
+                return {'garra': 'A garra cruza a faixa marcada. Mude de altura.',
+                        'penas': 'Duas penas cercam a mira. Saia das linhas.',
+                        'rasante': 'Leia a altura do voo antes de saltar ou abaixar.'}.get(self.tecnica, 'O sino a leva à raiz riscada. Suba para lançar K perto da face.')
+            if self.sino_movido:
+                return "E na roda toca o sino. Na raiz direita, suba e lance K perto da face exposta."
         return self.ficha.pista
 
     @property
     def som_aviso(self):
+        if self.indice == 2:
+            return {'salto': 'casco_salto', 'varrida': 'casco_chifre'}.get(self.tecnica, 'casco_avanco')
+        if self.indice == 3:
+            return {'garra': 'coruja_garra', 'penas': 'coruja_penas'}.get(self.tecnica, 'pressagio')
         if self.indice==0 and self.asa_rasteira:
             return "casco_avanco"
         return ("rasgo","fio_disparo","casco_avanco","pressagio")[self.indice]
@@ -169,7 +193,7 @@ class Encontro:
         return abs(corpo.centerx-x) <= alcance and self.chao-86 <= corpo.bottom <= self.chao+24
 
     def interacao(self, corpo):
-        if self.vencido or self.estado in ("aberto","desce","flor","rastro","investida_seiva"):
+        if self.vencido or self.estado in ("aberto","desce","flor","rastro","investida_seiva",'muda_casco','muda_coruja'):
             return ""
         if self.indice == 1 and self.agua <= 0 and self._perto(corpo, self.valvula):
             return "Abrir cortina de água"
@@ -197,6 +221,7 @@ class Encontro:
             self.alvo_y = self.chao - 35
             self.frente = 1 if self.destino > self.x else -1
             self.atingiu = False
+            self.combo_restante = 0
             self._mudar("rastro", .75)
             eventos.extend(("seiva", "aviso"))
         elif acao in ("Soltar seiva", "Empurrar seiva"):
@@ -214,6 +239,8 @@ class Encontro:
                 self.tempo = min(self.tempo, .15)
 
     def _abrir(self, duracao, eventos):
+        for nome in ('ondas', 'penas'):
+            getattr(self, nome, []).clear()
         self._mudar("aberto", duracao)
         self.onda = .7
         eventos.append("impacto")
@@ -243,10 +270,10 @@ class Encontro:
         self.sino_soou = False
         self.engatado = self.assentado = False
         self.barrel_x = self.inicio + 102
-        self._mudar("busca", 1.6)
+        self._mudar("busca", .55 if self.indice in (2, 3) else 1.6)
 
-    def _atualizar_aberto(self, corpo, golpe, clarao, eventos):
-        if self._acertou(corpo, golpe, clarao):
+    def _atualizar_aberto(self, corpo, golpe, clarao, eventos, permitir=True):
+        if permitir and self._acertou(corpo, golpe, clarao):
             self.progresso += 1
             self.vida = max(0.,self.vida-50.)
             self.onda = 1.
@@ -389,89 +416,14 @@ class Encontro:
         self.tramas = [t for t in self.tramas if t.tempo > 0 and not t.tocada]
 
     def _casco(self, dt, corpo, direcao, eventos):
-        if self.engatado:
-            if self._perto(corpo, self.barrel_x, 95):
-                # A peça acompanha o besouro somente quando Lume a empurra.
-                if direcao:
-                    desejado = corpo.centerx + direcao*27
-                    self.barrel_x = max(self.esq, min(self.dir, aproximar(self.barrel_x, desejado, dt*295)))
-            else:
-                self.engatado = False
-            if abs(self.barrel_x-self.entalhe) < 24:
-                self.barrel_x = self.entalhe
-                self.assentado, self.engatado = True, False
-                eventos.append("impacto")
-        if self.estado == "rastro":
-            if self.tempo <= 0:
-                self._mudar("investida_seiva", 5.)
-            return
-        if self.estado == "investida_seiva":
-            self.x = aproximar(self.x, self.entalhe, dt*247)
-            self._colisao(corpo, pygame.FRect(self.x-36,self.chao-52,72,52), eventos)
-            if not self.tabua_quebrada and abs(self.x-self.inicio-self.largura/2)<70:
-                self.tabua_quebrada = True
-                eventos.append("impacto")
-            if self.x == self.entalhe:
-                self.onda = 1.
-                self._mudar("flor", .65)
-                eventos.append("impacto")
-            return
-        if self.estado == "flor":
-            self.y = aproximar(self.y,self.chao-(45 if self.progresso==0 else 70),dt*150)
-            if self.tempo <= 0:
-                self.x = self.entalhe
-                self._abrir(5., eventos)
-            return
-        if self.estado == "busca":
-            self.y = aproximar(self.y, self.chao-35, dt*72)
-            self.frente = 1 if corpo.centerx>self.x else -1
-            if self.tempo <= 0:
-                self._aviso_investida(corpo.centerx + 64*self.frente, self.chao-35, 1.1, False, eventos)
-        elif self.estado == "aviso" and self.tempo <= 0:
-            self._mudar("investida", 2.)
-        elif self.estado == "investida":
-            self.x = aproximar(self.x, self.destino, dt*167)
-            if not self.tabua_quebrada and abs(self.x-self.inicio-self.largura/2)<70:
-                self.tabua_quebrada = True
-                eventos.append("impacto")
-            self._colisao(corpo, pygame.FRect(self.x-42,self.chao-55,84,54), eventos)
-            if self.tempo <= 0 or self.x == self.destino:
-                self._mudar("busca", 1.75)
+        from .casco import atualizar
+        atualizar(self, dt, corpo, direcao, eventos)
 
     def _coruja(self, dt, corpo, ruido, eventos):
-        if ruido > .05:
-            self.x_ouvido = corpo.centerx
-        if self.estado == "busca":
-            self.y = aproximar(self.y,self.chao-103+sin(self.relogio*2.3)*5,dt*116)
-            if self.tempo <= 0:
-                self.turno += 1
-                if self.sino_soou:
-                    self.sino_soou = False
-                    # Afasta-se primeiro, se uma investida anterior terminou sob o sino.
-                    if abs(self.dir-self.x)<130:
-                        self._mudar("contorna", .95)
-                        self.sino_soou = True
-                        return
-                    alvo, alto, parede = self.dir, True, True
-                else:
-                    patrulha = self.esq if self.x > (self.esq+self.dir)/2 else self.dir
-                    alvo = self.x_ouvido if self.x_ouvido is not None else patrulha
-                    self.x_ouvido = None
-                    alto, parede = self.turno % 2 == 1, False
-                self._aviso_investida(alvo, self.chao-(32 if alto else 13), 1.05, parede, eventos)
-        elif self.estado == "contorna":
-            self.x = aproximar(self.x, self.esq, dt*310)
-            self.frente, self.y = -1, self.chao-145
-            if self.tempo <= 0:
-                self._mudar("busca", .22)
-        elif self.estado == "aviso":
-            self.y = aproximar(self.y, self.alvo_y, dt*160)
-            if self.tempo <= 0:
-                self._mudar("investida", 2.)
-        elif self.estado == "investida":
-            self._voar(dt, corpo, eventos, 415)
+        from .coruja import atualizar
+        atualizar(self, dt, corpo, ruido, eventos)
 
-    def update(self, dt, corpo, *, ruido=0., golpe=None, clarao=False, interagir=False, direcao=0, serie=None, bonus_dano=1.):
+    def update(self, dt, corpo, *, ruido=0., golpe=None, clarao=False, interagir=False, direcao=0, serie=None, bonus_dano=1., dano_corte=2.):
         """Recebe bordas de comando (golpe, clarão e E); retorna eventos desta atualização."""
         eventos = []
         self.relogio += dt
@@ -481,28 +433,36 @@ class Encontro:
             return eventos
         # A arena aceita um acerto por arco, mesmo quando a fraqueza não está
         # exposta. Um crítico mantém o valor dos mecanismos de cada guardião.
-        identificador=("pulso",self.relogio) if clarao else serie
-        novo = identificador != self.ultimo_corte if identificador is not None else self.relogio-self.ultimo_golpe_t>.3
-        fraco = self.estado=="aberto" and self._acertou(corpo,golpe,clarao)
+        novo = serie != self.ultimo_corte if serie is not None else self.relogio-self.ultimo_golpe_t>.3
+        # Clarão e espada têm identificadores independentes: K não renova um
+        # arco que já acertou. Um corte comum também não vira um segundo crítico.
+        fraco = (self.estado=="aberto" and self._acertou(corpo,golpe,clarao)
+                 and (clarao if self.indice == 3 else novo))
         corpo_chefe=pygame.FRect(self.x-46,self.y-55,92,110)
         acertou = golpe is not None and corpo_chefe.colliderect(golpe)
-        if novo and (acertou or (clarao and hypot(corpo.centerx-self.x,corpo.centery-self.y)<214)):
-            self.ultimo_corte=identificador
-            self.ultimo_golpe_t=self.relogio
+        pulso_perto = clarao and hypot(corpo.centerx-self.x,corpo.centery-self.y)<214
+        if (novo and acertou) or pulso_perto:
+            if novo and acertou:
+                self.ultimo_corte=serie
+                self.ultimo_golpe_t=self.relogio
             if not fraco:
-                dano=(7.,3.,0.,4.)[self.indice] if clarao else 2.*bonus_dano
+                dano=(7.,3.,0.,4.)[self.indice] if pulso_perto else dano_corte*bonus_dano
                 self.vida=max(0.,self.vida-dano)
                 eventos.append("acerto" if dano else "bloqueio")
                 if self.vida<=0:
                     self.vencido=True;self.estado="repouso"
                     eventos.append("chefe_resolvido")
                     return eventos
-        dt *= 1.35 if self.indice==0 else 1.2
+        # Casco e Coruja possuem tempos reais próprios, inclusive avisos.
+        dt *= 1.35 if self.indice==0 else 1.2 if self.indice==1 else 1.
         self.tempo -= dt
         if interagir:
             self._usar(corpo, eventos)
         if self.estado == "aberto":
-            self._atualizar_aberto(corpo, golpe, clarao, eventos)
+            if fraco and golpe is not None and self.indice != 3:
+                self.ultimo_corte = serie
+                self.ultimo_golpe_t = self.relogio
+            self._atualizar_aberto(corpo, golpe, clarao, eventos, permitir=fraco)
         elif self.indice == 0:
             self._asa(dt, corpo, eventos)
         elif self.indice == 1:

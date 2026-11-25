@@ -16,7 +16,7 @@ from .memoria import pasta_dados
 from .travessia import Comando, NIVEIS
 
 ESQUEMA = 1
-SIMULACAO = "s04-aranha-1"
+SIMULACAO = "s05-aranha-1"
 MAX_PASSOS = 18_000
 MAX_ARQUIVOS = 32
 MAX_BYTES = 8 * 1024 * 1024
