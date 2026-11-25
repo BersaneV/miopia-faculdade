@@ -249,6 +249,9 @@ class App:
         if self.estado=='prologo':self.fala_paginas=[msg]
         else:
             escolha=self.jogo and self.jogo.escolha_resgate is not None
+            if escolha:
+                oficio=self.jogo.sobreviventes[self.jogo.escolha_resgate]['oficio']
+                self.selecao=int(oficio=='abrigo')
             x=179 if self.jogo and self.jogo.dialogo and self.jogo.dialogo[0] in telas.NPC_TAM else 97
             partes=linhas(msg,760 if escolha else 825-x,17)
             tamanho=4 if escolha else 3

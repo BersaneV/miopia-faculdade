@@ -189,7 +189,12 @@ def dialogo(a,s):
         paragrafo(s,a.fala_visivel,97,277,760,17,OSSO)
         ultima=a.pagina_fala==len(a.fala_paginas)-1 and a.letras==len(a.fala)
         if ultima:
-            opcoes(a,s,['Marcar a trilha com luz','Preparar um mantimento único'],90,386,770,35,16)
+            nomes=['Marcar a trilha com luz','Preparar um mantimento único']
+            if j.escolha_resgate=='tila':
+                pavio=('pavio já recebido' if j.sobreviventes['tila']['premio']
+                       else '1 Pavio de pólen, com 12 s de visão ampliada')
+                nomes=['Marcar a grade e a forquilha com luz',f'Ajudar Mimo no abrigo · {pavio}']
+            opcoes(a,s,nomes,90,386,770,35,16)
             texto(s,'Cima / baixo escolher · Enter confirmar · Esc decidir depois',97,467,12,PALIDO)
         else:texto(s,f'Enter avançar · {a.pagina_fala+1}/{len(a.fala_paginas)}',863,465,12,PALIDO,'normal','right')
         return
