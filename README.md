@@ -1,4 +1,6 @@
-# Miopia — A última luz da mata
+# Miopia — estudo do Bosque e da esquiva
+
+Prévia para a equipe avaliar. A revisão jogável que serve de base está no [PR da equipe](https://github.com/miopia-game/miopia/pull/2). [O que experimentar nesta branch](docs/arte/ESTUDO_DO_BOSQUE.md)
 
 Lume é um vaga-lume míope numa floresta em seca. De perto, ele enxerga o galho em que pisa. Para descobrir o que o espera do outro lado, pode lançar a própria luz. A mesma fagulha que revela um pouso também atrai predadores. Esse é o ponto de partida deste metroidvania 2D feito em Python e Pygame CE.
 
@@ -25,7 +27,7 @@ No Windows, use `py -3.12 -m venv .venv` com o Python 3.12 e substitua `.venv/bi
 | Andar | A / D ou setas |
 | Pular, bater as asas no ar e planar na queda | Espaço, segundo toque e manter pressionado |
 | Abaixar ou atravessar um apoio que permite descida | S ou S + Espaço |
-| Deslizar no chão enquanto anda | A / D + Shift |
+| Deslizar no chão na direção do olhar | Shift |
 | Corte rápido e golpe pesado | J e L |
 | Clarear os arredores | K |
 | Lançar uma fagulha na direção do olhar | G |
